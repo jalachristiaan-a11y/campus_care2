@@ -1,0 +1,322 @@
+.confirmation-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow-y: auto;
+  padding: 1.25rem;
+  background: rgba(15, 23, 42, 0.48);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.confirmation-card {
+  position: relative;
+  display: flex;
+  width: min(100%, 640px);
+  flex-direction: column;
+  align-items: center;
+  padding: 2rem;
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: 0 25px 60px rgba(15, 23, 42, 0.25);
+  text-align: center;
+  animation: confirmation-pop-in 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes confirmation-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.97);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.confirmation-close {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #94a3b8;
+  cursor: pointer;
+}
+
+.confirmation-close:hover {
+  background: #f1f5f9;
+  color: #334155;
+}
+
+.confirmation-success-icon {
+  display: grid;
+  width: 4.25rem;
+  height: 4.25rem;
+  place-items: center;
+  margin: 0 0 0.75rem;
+  border: 2px solid #a7f3d0;
+  border-radius: 50%;
+  background: #ecfdf5;
+  color: #059669;
+  box-shadow: 0 0 0 6px rgba(209, 250, 229, 0.45);
+}
+
+.confirmation-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-bottom: 0.9rem;
+  padding: 0.25rem 0.75rem;
+  border: 1px solid #a7f3d0;
+  border-radius: 999px;
+  background: #ecfdf5;
+  color: #047857;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.confirmation-status-dot {
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 50%;
+  background: #10b981;
+}
+
+.confirmation-status.tracking.review,
+.confirmation-status.tracking.progress {
+  border-color: #fde68a;
+  background: #fffbeb;
+  color: #b45309;
+}
+
+.confirmation-status.tracking.review .confirmation-status-dot,
+.confirmation-status.tracking.progress .confirmation-status-dot {
+  background: #f59e0b;
+}
+
+.confirmation-status.tracking.closed {
+  border-color: #a7f3d0;
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.confirmation-card h2 {
+  color: #0f172a;
+  font-size: clamp(1.25rem, 4vw, 1.55rem);
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  line-height: 1.25;
+}
+
+.confirmation-description {
+  max-width: 480px;
+  margin: 0.6rem 0 1.4rem;
+  color: #64748b;
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+
+.confirmation-description strong {
+  color: #1e293b;
+}
+
+.confirmation-ticket {
+  width: 100%;
+  margin-bottom: 1.4rem;
+  padding: 1.1rem 1.2rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 15px;
+  background: #f8fafc;
+  text-align: left;
+}
+
+.confirmation-ticket-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 0.9rem;
+  border-bottom: 1px dashed #cbd5e1;
+}
+
+.confirmation-ticket-header > div,
+.confirmation-detail {
+  display: flex;
+  flex-direction: column;
+}
+
+.confirmation-ticket-label {
+  margin-bottom: 0.15rem;
+  color: #64748b;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+.confirmation-ticket-id {
+  color: #0f172a;
+  font-size: 1.1rem;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.confirmation-copy-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 2.1rem;
+  padding: 0.4rem 0.65rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
+  color: #475569;
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.confirmation-copy-button:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+.confirmation-details {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  padding-top: 0.85rem;
+}
+
+.confirmation-detail {
+  min-width: 0;
+  gap: 0.3rem;
+}
+
+.confirmation-detail-label {
+  color: #94a3b8;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.confirmation-detail-value {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: #1e293b;
+  font-size: 0.8rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.confirmation-detail-value svg {
+  flex: 0 0 auto;
+  color: #64748b;
+}
+
+.confirmation-detail-value.confirmation-sla,
+.confirmation-detail-value.confirmation-sla svg {
+  color: #059669;
+}
+
+.confirmation-copy-error {
+  display: block;
+  margin-top: 0.75rem;
+  color: #b91c1c;
+  font-size: 0.75rem;
+}
+
+.confirmation-actions {
+  display: flex;
+  width: 100%;
+  align-items: stretch;
+  gap: 0.75rem;
+}
+
+.confirmation-secondary-button,
+.confirmation-primary-button {
+  display: flex;
+  min-height: 3.25rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 700;
+  transition: background 150ms ease, border-color 150ms ease;
+}
+
+.confirmation-secondary-button {
+  flex: 1;
+  padding: 0.7rem;
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  color: #334155;
+}
+
+.confirmation-secondary-button:hover {
+  border-color: #94a3b8;
+  background: #f8fafc;
+}
+
+.confirmation-primary-button {
+  flex: 1.35;
+  gap: 0.5rem;
+  padding: 0.7rem 0.9rem;
+  border: 0;
+  background: #b91c1c;
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(185, 28, 28, 0.22);
+}
+
+.confirmation-primary-button:hover {
+  background: #991b1b;
+}
+
+.confirmation-close:focus-visible,
+.confirmation-copy-button:focus-visible,
+.confirmation-secondary-button:focus-visible,
+.confirmation-primary-button:focus-visible {
+  outline: 3px solid rgba(200, 30, 30, 0.3);
+  outline-offset: 2px;
+}
+
+@media (max-width: 520px) {
+  .confirmation-overlay {
+    padding: 0.75rem;
+  }
+
+  .confirmation-card {
+    padding: 2rem 1.1rem 1.25rem;
+    border-radius: 16px;
+  }
+
+  .confirmation-ticket {
+    padding: 0.9rem;
+  }
+
+  .confirmation-actions {
+    flex-direction: column-reverse;
+  }
+
+  .confirmation-secondary-button,
+  .confirmation-primary-button {
+    flex: auto;
+    min-height: 2.9rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .confirmation-card {
+    animation: none;
+  }
+}
