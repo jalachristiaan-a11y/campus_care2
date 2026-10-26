@@ -5,12 +5,19 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "api": "node server.cjs",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview"
   },
   "dependencies": {
+    "bcryptjs": "^3.0.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^5.1.0",
+    "jsonwebtoken": "^9.0.2",
     "lucide-react": "^1.61.0",
+    "pg": "^8.16.3",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
   },

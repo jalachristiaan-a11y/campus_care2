@@ -1,4 +1,5 @@
 const STORAGE_KEY = 'campuscare.grievances';
+const STUDENT_MESSAGES_KEY = 'campuscare.student-messages';
 
 export function getGrievances() {
   const storedGrievances = window.localStorage.getItem(STORAGE_KEY);
@@ -12,6 +13,33 @@ export function getGrievances() {
   }
 
   return grievances;
+}
+
+export function getStudentMessages() {
+  const storedMessages = window.localStorage.getItem(STUDENT_MESSAGES_KEY);
+  if (storedMessages === null) {
+    return [];
+  }
+
+  const messages = JSON.parse(storedMessages);
+  if (!Array.isArray(messages)) {
+    throw new Error('Saved student message data is invalid. Clear the CampusCare message data and try again.');
+  }
+
+  return messages;
+}
+
+export function saveStudentMessage(message) {
+  const messages = getStudentMessages();
+  const savedMessage = {
+    ...message,
+    id: message.id || `NOT-${Date.now()}`,
+    sentAt: message.sentAt || new Date().toISOString(),
+  };
+
+  window.localStorage.setItem(STUDENT_MESSAGES_KEY, JSON.stringify([savedMessage, ...messages]));
+  window.dispatchEvent(new CustomEvent('campuscare:messages-updated'));
+  return savedMessage;
 }
 
 export function saveGrievance(formData, user = {}) {
@@ -30,9 +58,35 @@ export function saveGrievance(formData, user = {}) {
     location: formData.location.trim(),
     submittedAt: now.toISOString(),
     submittedBy: user.universityEmail ?? '',
+    submittedByName: user.fullName ?? '',
+    studentId: user.studentId ?? '',
     attachment: formData.attachment ?? null,
   };
 
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify([grievance, ...grievances]));
   return grievance;
+}
+
+export function resolveGrievance(grievanceId) {
+  const grievances = getGrievances();
+  const grievanceIndex = grievances.findIndex((item) => item.id === grievanceId);
+
+  if (grievanceIndex === -1) {
+    return null;
+  }
+
+  const now = new Date();
+  const resolvedGrievance = {
+    ...grievances[grievanceIndex],
+    status: 'Resolved',
+    statusClass: 'closed',
+    updated: 'Resolved just now',
+    resolvedAt: now.toISOString(),
+  };
+  const updatedGrievances = [...grievances];
+  updatedGrievances[grievanceIndex] = resolvedGrievance;
+  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedGrievances));
+  window.dispatchEvent(new CustomEvent('campuscare:grievances-updated'));
+
+  return resolvedGrievance;
 }
