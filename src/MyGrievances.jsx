@@ -1,5 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import './MyGrievances.css';
+import SubmitGrievance from './SubmitGrievance.jsx';
+import { apiRequest } from './apiClient.js';
 
 const formatDate = (dateValue) => {
   if (!dateValue) {
@@ -18,10 +20,12 @@ const formatDate = (dateValue) => {
   }).format(date);
 };
 
-function TicketTracking({ grievance, onBack }) {
+function TicketTracking({ grievance, onBack, token }) {
+  const [activityState, setActivityState] = useState({ complaintId: '', activity: [], error: '' });
   const isUnderReview = grievance.statusClass === 'review';
   const isInProgress = grievance.statusClass === 'progress';
   const isResolved = grievance.statusClass === 'closed';
+  const isWithdrawn = grievance.statusClass === 'withdrawn';
   const steps = [
     {
       title: 'Ticket submitted',
@@ -57,6 +61,33 @@ function TicketTracking({ grievance, onBack }) {
       upcoming: !isResolved,
     },
   ];
+
+  useEffect(() => {
+    let active = true;
+    apiRequest(`/api/complaints/${encodeURIComponent(grievance.id)}/activity`, token)
+      .then((result) => {
+        if (active) {
+          setActivityState({
+            complaintId: grievance.id,
+            activity: result.activity,
+            error: '',
+          });
+        }
+      })
+      .catch((error) => {
+        if (active) {
+          setActivityState({
+            complaintId: grievance.id,
+            activity: [],
+            error: error instanceof Error ? error.message : 'Unable to load case responses.',
+          });
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [grievance.id, token]);
 
   return (
     <section className="ticket-tracking">
@@ -117,29 +148,35 @@ function TicketTracking({ grievance, onBack }) {
 
         <article className="ticket-tracking-panel ticket-tracking-progress">
           <h2>Progress</h2>
-          <ol className="ticket-tracking-timeline">
-            {steps.map((step) => (
-              <li
-                key={step.title}
-                className={[
-                  step.complete ? 'complete' : '',
-                  step.current ? 'current' : '',
-                  step.upcoming ? 'upcoming' : '',
-                ].filter(Boolean).join(' ')}
-              >
-                <span className="ticket-tracking-marker" aria-hidden="true" />
-                <div>
-                  <h3>{step.title}</h3>
-                  <p>{step.description}</p>
-                  {step.title === 'Ticket submitted' && grievance.submittedAt && (
-                    <time dateTime={grievance.submittedAt}>
-                      {formatDate(grievance.submittedAt)}
-                    </time>
-                  )}
-                </div>
-              </li>
-            ))}
-          </ol>
+          {isWithdrawn ? (
+            <p className="ticket-tracking-updated">
+              This grievance was withdrawn and will not be processed further.
+            </p>
+          ) : (
+            <ol className="ticket-tracking-timeline">
+              {steps.map((step) => (
+                <li
+                  key={step.title}
+                  className={[
+                    step.complete ? 'complete' : '',
+                    step.current ? 'current' : '',
+                    step.upcoming ? 'upcoming' : '',
+                  ].filter(Boolean).join(' ')}
+                >
+                  <span className="ticket-tracking-marker" aria-hidden="true" />
+                  <div>
+                    <h3>{step.title}</h3>
+                    <p>{step.description}</p>
+                    {step.title === 'Ticket submitted' && grievance.submittedAt && (
+                      <time dateTime={grievance.submittedAt}>
+                        {formatDate(grievance.submittedAt)}
+                      </time>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ol>
+          )}
           {grievance.updated && (
             <p className="ticket-tracking-updated">
               Latest update: {grievance.updated}
@@ -147,15 +184,51 @@ function TicketTracking({ grievance, onBack }) {
           )}
         </article>
       </div>
+      <article className="ticket-tracking-panel ticket-tracking-activity">
+        <h2>Responses &amp; case history</h2>
+        {activityState.complaintId !== grievance.id ? (
+          <p>Loading case history…</p>
+        ) : activityState.error ? (
+          <p className="ticket-tracking-activity-error" role="alert">{activityState.error}</p>
+        ) : activityState.activity.length ? (
+          <ol>
+            {activityState.activity.map((activity) => (
+              <li key={activity.id}>
+                <div>
+                  <strong>
+                    {activity.type === 'resolution' ? 'Resolution note' : activity.type}
+                    {' · '}{activity.actor}
+                  </strong>
+                  <time dateTime={activity.createdAt}>
+                    {new Date(activity.createdAt).toLocaleString()}
+                  </time>
+                </div>
+                <p>{activity.message}</p>
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <p>No responses or updates have been recorded yet.</p>
+        )}
+      </article>
     </section>
   );
 }
 
-export default function MyGrievances({ grievances, onNewGrievance }) {
+export default function MyGrievances({
+  grievances,
+  token,
+  onNewGrievance,
+  onUpdateGrievance,
+  onWithdrawGrievance,
+}) {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [departmentFilter, setDepartmentFilter] = useState('All');
   const [trackedGrievance, setTrackedGrievance] = useState(null);
+  const [editingGrievance, setEditingGrievance] = useState(null);
+  const [withdrawingId, setWithdrawingId] = useState('');
+  const [withdrawalError, setWithdrawalError] = useState({ id: '', message: '' });
 
   const departments = useMemo(
     () => [...new Set(grievances.map((grievance) => grievance.category))],
@@ -163,25 +236,57 @@ export default function MyGrievances({ grievances, onNewGrievance }) {
   );
 
   const activeCount = grievances.filter(
-    (grievance) => grievance.statusClass !== 'closed',
+    (grievance) => !['closed', 'withdrawn'].includes(grievance.statusClass),
   ).length;
 
   const filteredGrievances = grievances.filter((grievance) => {
     const searchText = `${grievance.id} ${grievance.title} ${grievance.category} ${grievance.department}`.toLowerCase();
     const matchesSearch = searchText.includes(search.trim().toLowerCase());
     const matchesStatus = statusFilter === 'All'
-      || (statusFilter === 'Active' && grievance.statusClass !== 'closed')
-      || (statusFilter === 'Resolved' && grievance.statusClass === 'closed');
+      || (statusFilter === 'Active' && !['closed', 'withdrawn'].includes(grievance.statusClass))
+      || (statusFilter === 'Resolved' && grievance.statusClass === 'closed')
+      || (statusFilter === 'Withdrawn' && grievance.statusClass === 'withdrawn');
     const matchesDepartment = departmentFilter === 'All'
       || grievance.category === departmentFilter;
 
     return matchesSearch && matchesStatus && matchesDepartment;
   });
 
+  const handleWithdraw = async (grievance) => {
+    const confirmed = window.confirm(
+      `Withdraw ${grievance.id}? This cannot be undone, and the complaint will no longer be processed.`,
+    );
+    if (!confirmed) return;
+
+    setWithdrawingId(grievance.id);
+    setWithdrawalError({ id: '', message: '' });
+    try {
+      await onWithdrawGrievance(grievance.id);
+    } catch (error) {
+      setWithdrawalError({
+        id: grievance.id,
+        message: error instanceof Error ? error.message : 'Unable to withdraw this grievance.',
+      });
+    } finally {
+      setWithdrawingId('');
+    }
+  };
+
+  if (editingGrievance) {
+    return (
+      <SubmitGrievance
+        editingGrievance={editingGrievance}
+        onCancel={() => setEditingGrievance(null)}
+        onSubmit={(formData) => onUpdateGrievance(editingGrievance.id, formData)}
+      />
+    );
+  }
+
   if (trackedGrievance) {
     return (
       <TicketTracking
         grievance={trackedGrievance}
+        token={token}
         onBack={() => setTrackedGrievance(null)}
       />
     );
@@ -217,6 +322,7 @@ export default function MyGrievances({ grievances, onNewGrievance }) {
             <option>All</option>
             <option>Active</option>
             <option>Resolved</option>
+            <option>Withdrawn</option>
           </select>
         </label>
         <label className="grievance-filter">
@@ -262,6 +368,30 @@ export default function MyGrievances({ grievances, onNewGrievance }) {
               >
                 Track Ticket
               </button>
+              {grievance.status === 'Under Review' && (
+                <div className="my-grievance-actions">
+                  <button
+                    type="button"
+                    className="my-grievance-edit-button"
+                    onClick={() => setEditingGrievance(grievance)}
+                  >
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    className="my-grievance-withdraw-button"
+                    disabled={withdrawingId === grievance.id}
+                    onClick={() => handleWithdraw(grievance)}
+                  >
+                    {withdrawingId === grievance.id ? 'Withdrawing…' : 'Withdraw'}
+                  </button>
+                </div>
+              )}
+              {withdrawalError.id === grievance.id && (
+                <p className="my-grievance-action-error" role="alert">
+                  {withdrawalError.message}
+                </p>
+              )}
             </article>
           ))}
         </div>

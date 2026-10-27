@@ -1241,3 +1241,1152 @@
   padding-top: 1rem;
   border-top: 1px solid #f1f5f9;
 }
+
+/* Student portal navigation */
+.dashboard-container > .navbar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  min-height: 108px;
+  column-gap: 1.5rem;
+  padding: 1rem clamp(1.25rem, 3.75vw, 3.75rem);
+  background: #fff;
+  border-bottom: 3px solid #b91c1c;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+}
+
+.dashboard-container > .navbar .brand {
+  min-width: 0;
+  flex: 0 0 auto;
+  gap: 0.8rem;
+}
+
+.dashboard-container > .navbar .brand-logo {
+  width: 3.65rem;
+  height: 3.65rem;
+  border: 2px solid #991b1b;
+  border-radius: 50%;
+  background: #b91c1c;
+  color: #fff;
+  box-shadow: inset 0 0 0 3px #b91c1c, 0 0 0 3px #fee2e2;
+}
+
+.dashboard-container > .navbar .brand-logo span {
+  display: grid;
+  width: 2.35rem;
+  height: 2.35rem;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  border-radius: 50%;
+  font-family: Georgia, serif;
+  font-size: 1.45rem;
+  font-weight: 700;
+}
+
+.dashboard-container > .navbar .brand-text {
+  gap: 0.2rem;
+  white-space: nowrap;
+}
+
+.dashboard-container > .navbar .brand-name {
+  color: #475569;
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.dashboard-container > .navbar .brand-sub {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  color: #334155;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.dashboard-container > .navbar .brand-sub strong {
+  color: #b91c1c;
+  font-weight: 800;
+}
+
+.dashboard-container > .navbar .brand-divider {
+  width: 1px;
+  height: 1rem;
+  background: #cbd5e1;
+}
+
+.dashboard-container > .navbar .nav-menu {
+  position: static;
+  display: flex;
+  justify-content: center;
+  gap: clamp(0.75rem, 2.5vw, 2.5rem);
+  padding: 0;
+  background: transparent;
+}
+
+.dashboard-container > .navbar .nav-item {
+  position: relative;
+  padding: 0.65rem 0.15rem;
+  border-radius: 0;
+  background: transparent;
+  color: #334155;
+  font-size: 1rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.dashboard-container > .navbar .nav-item:hover,
+.dashboard-container > .navbar .nav-item.active {
+  background: transparent;
+  color: #b91c1c;
+}
+
+.dashboard-container > .navbar .nav-item.active::after {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 3px;
+  border-radius: 999px;
+  background: #b91c1c;
+  content: '';
+}
+
+.dashboard-container > .navbar .nav-right {
+  justify-self: end;
+  gap: 1rem;
+}
+
+.dashboard-container > .navbar .student-notifications-button {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-color: transparent;
+  border-radius: 50%;
+}
+
+.dashboard-container > .navbar .student-logout-button {
+  min-height: 3.1rem;
+  min-width: 7rem;
+  justify-content: center;
+  margin: 0;
+  padding: 0.75rem 1.5rem;
+  border: 0;
+  border-radius: 999px;
+  background: #b91c1c;
+  box-shadow: 0 8px 18px rgba(185, 28, 28, 0.18);
+  color: #fff;
+  font-size: 0.95rem;
+}
+
+.dashboard-container > .navbar .student-logout-button:hover {
+  border: 0;
+  background: #991b1b;
+}
+
+@media (max-width: 1100px) {
+  .dashboard-container > .navbar {
+    grid-template-columns: minmax(0, 1fr) auto;
+    row-gap: 0.5rem;
+  }
+
+  .dashboard-container > .navbar .nav-menu {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    width: 100%;
+    justify-content: center;
+  }
+
+  .dashboard-container > .navbar .nav-right {
+    grid-column: 2;
+    grid-row: 1;
+  }
+}
+
+@media (max-width: 640px) {
+  .dashboard-container > .navbar {
+    grid-template-columns: minmax(0, 1fr) auto;
+    min-height: auto;
+    column-gap: 0.5rem;
+    row-gap: 0.35rem;
+    padding: 0.85rem 1rem;
+  }
+
+  .dashboard-container > .navbar .brand {
+    grid-column: 1;
+    grid-row: 1;
+    gap: 0.55rem;
+  }
+
+  .dashboard-container > .navbar .brand-logo {
+    flex: 0 0 auto;
+    width: 2.85rem;
+    height: 2.85rem;
+  }
+
+  .dashboard-container > .navbar .brand-logo span {
+    width: 1.9rem;
+    height: 1.9rem;
+    font-size: 1.15rem;
+  }
+
+  .dashboard-container > .navbar .brand-name {
+    font-size: 0.7rem;
+    letter-spacing: 0.01em;
+  }
+
+  .dashboard-container > .navbar .brand-sub {
+    gap: 0.35rem;
+    font-size: 0.75rem;
+  }
+
+  .dashboard-container > .navbar .nav-menu {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    min-width: 0;
+    justify-content: flex-start;
+    gap: 1rem;
+    overflow-x: auto;
+    padding: 0 0.1rem;
+    scrollbar-width: thin;
+  }
+
+  .dashboard-container > .navbar .nav-item {
+    flex: 0 0 auto;
+    font-size: 0.85rem;
+  }
+
+  .dashboard-container > .navbar .nav-right {
+    grid-column: 2;
+    grid-row: 1;
+    gap: 0.25rem;
+    margin: 0;
+  }
+
+  .dashboard-container > .navbar .student-logout-button {
+    min-width: 0;
+    min-height: 2.65rem;
+    padding: 0.6rem 1rem;
+    font-size: 0.8rem;
+  }
+
+  .dashboard-container > .navbar .student-logout-button svg {
+    display: none;
+  }
+}
+
+@media (max-width: 380px) {
+  .dashboard-container > .navbar {
+    padding-right: 0.75rem;
+    padding-left: 0.75rem;
+  }
+
+  .dashboard-container > .navbar .brand {
+    gap: 0.4rem;
+  }
+
+  .dashboard-container > .navbar .brand-logo {
+    width: 2.45rem;
+    height: 2.45rem;
+  }
+
+  .dashboard-container > .navbar .brand-logo span {
+    width: 1.65rem;
+    height: 1.65rem;
+    font-size: 1rem;
+  }
+
+  .dashboard-container > .navbar .brand-text {
+    min-width: 0;
+  }
+
+  .dashboard-container > .navbar .brand-name {
+    overflow: hidden;
+    font-size: 0.62rem;
+    text-overflow: ellipsis;
+  }
+
+  .dashboard-container > .navbar .brand-sub {
+    gap: 0.25rem;
+    font-size: 0.68rem;
+  }
+
+  .dashboard-container > .navbar .student-notifications-button {
+    width: 2rem;
+    height: 2rem;
+  }
+
+  .dashboard-container > .navbar .student-logout-button {
+    padding: 0.5rem 0.65rem;
+    font-size: 0.72rem;
+  }
+}
+
+/* Student dashboard layout */
+.dashboard-container {
+  --campuscare-crimson: #800020;
+  --campuscare-crimson-dark: #66001a;
+  --campuscare-crimson-soft: #fff1f3;
+  min-height: 100vh;
+  padding: clamp(0.75rem, 2.5vw, 2rem);
+  background:
+    radial-gradient(ellipse at 12% 10%, rgba(128, 0, 32, 0.1), transparent 36%),
+    #fff5f6;
+  color: #242033;
+}
+
+.student-portal-shell {
+  display: flex;
+  width: min(100%, 1440px);
+  min-height: calc(100vh - clamp(1.5rem, 5vw, 4rem));
+  margin: 0 auto;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  border-radius: 1.65rem;
+  background: #fff;
+  box-shadow: 0 24px 70px rgba(80, 0, 20, 0.14);
+}
+
+.student-sidebar {
+  display: flex;
+  width: 204px;
+  flex: 0 0 204px;
+  flex-direction: column;
+  gap: 2rem;
+  margin: 1rem 0 1rem 1rem;
+  padding: 1.15rem 0.9rem;
+  border-radius: 1.25rem;
+  background: linear-gradient(165deg, #a00028 0%, var(--campuscare-crimson) 48%, var(--campuscare-crimson-dark) 100%);
+  color: #fff;
+}
+
+.student-sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.3rem;
+  color: inherit;
+  text-decoration: none;
+}
+
+.student-sidebar-logo {
+  display: grid;
+  width: 2.8rem;
+  height: 2.8rem;
+  flex: 0 0 auto;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.65);
+  border-radius: 0.9rem;
+  background: #fff;
+}
+
+.student-sidebar-logo img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.student-sidebar-brand strong,
+.student-sidebar-brand small {
+  display: block;
+}
+
+.student-sidebar-brand strong {
+  font-size: 0.95rem;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+}
+
+.student-sidebar-brand small {
+  margin-top: 0.15rem;
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+}
+
+.student-sidebar-nav {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.student-sidebar-link,
+.student-sidebar-logout {
+  display: flex;
+  width: 100%;
+  min-height: 2.65rem;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.65rem 0.7rem;
+  border: 0;
+  border-radius: 0.7rem;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.73);
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.16s ease, color 0.16s ease;
+}
+
+.student-sidebar-link:hover,
+.student-sidebar-logout:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+
+.student-sidebar-link.active {
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+  box-shadow: inset 3px 0 #fff;
+}
+
+.student-sidebar-link svg,
+.student-sidebar-logout svg {
+  flex: 0 0 auto;
+}
+
+.student-sidebar-logout {
+  width: auto;
+  margin-top: auto;
+}
+
+.student-workspace {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.student-topbar {
+  position: relative;
+  z-index: 20;
+  display: flex;
+  min-height: 5.5rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.85rem clamp(1.25rem, 3vw, 2.5rem);
+  border: 0;
+  background: #fff;
+}
+
+.student-topbar-title span,
+.student-topbar-title strong {
+  display: block;
+}
+
+.student-topbar-title span {
+  margin-bottom: 0.15rem;
+  color: #9a7f84;
+  font-size: 0.59rem;
+  font-weight: 750;
+  letter-spacing: 0.14em;
+}
+
+.student-topbar-title strong {
+  color: #29233a;
+  font-size: 1rem;
+  font-weight: 750;
+}
+
+.student-topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: clamp(0.8rem, 2vw, 1.6rem);
+}
+
+.student-profile {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.student-profile-avatar {
+  display: grid;
+  width: 2.45rem;
+  height: 2.45rem;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 2px solid var(--campuscare-crimson);
+  border-radius: 50%;
+  background: var(--campuscare-crimson-soft);
+  color: var(--campuscare-crimson);
+  font-size: 0.7rem;
+  font-weight: 800;
+}
+
+.student-profile-copy {
+  display: grid;
+  min-width: 0;
+  gap: 0.14rem;
+}
+
+.student-profile-copy strong {
+  overflow: hidden;
+  color: #2b2638;
+  font-size: 0.73rem;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.student-profile-copy small {
+  overflow: hidden;
+  max-width: 12rem;
+  color: #938187;
+  font-size: 0.63rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.student-topbar .student-notifications-button {
+  width: 2.35rem;
+  height: 2.35rem;
+  border: 0;
+  background: #faf8fd;
+  color: #51465f;
+}
+
+.student-topbar .student-notifications-button:hover {
+  background: var(--campuscare-crimson-soft);
+  color: var(--campuscare-crimson);
+}
+
+.main-content {
+  width: 100%;
+  max-width: none;
+  flex: 1;
+  gap: 1.35rem;
+  padding: 0.65rem clamp(1.25rem, 3vw, 2.5rem) 2rem;
+}
+
+.welcome-banner {
+  position: relative;
+  min-height: 10.5rem;
+  overflow: hidden;
+  padding: 1.65rem 2rem;
+  border: 0;
+  border-radius: 1.15rem;
+  background: #fff;
+  color: #242033;
+  box-shadow: 0 12px 28px rgba(80, 0, 20, 0.08);
+}
+
+.welcome-banner::before,
+.welcome-banner::after {
+  position: absolute;
+  border: 1px solid rgba(128, 0, 32, 0.1);
+  border-radius: 50%;
+  content: '';
+  pointer-events: none;
+}
+
+.welcome-banner::before {
+  top: -5.3rem;
+  right: 7rem;
+  width: 14rem;
+  height: 14rem;
+}
+
+.welcome-banner::after {
+  right: 2rem;
+  bottom: -7rem;
+  width: 17rem;
+  height: 17rem;
+}
+
+.welcome-info {
+  position: relative;
+  z-index: 2;
+  max-width: 72%;
+}
+
+.welcome-date {
+  margin-bottom: 1.15rem;
+  color: #817178;
+  font-size: 0.68rem;
+}
+
+.welcome-heading {
+  margin-bottom: 0.35rem;
+  color: var(--campuscare-crimson);
+  font-size: clamp(1.4rem, 2.2vw, 1.85rem);
+  font-weight: 800;
+  letter-spacing: -0.035em;
+}
+
+.welcome-student-id {
+  color: #675b60;
+}
+
+.welcome-student-id strong {
+  color: #30272b;
+}
+
+.welcome-student-id svg {
+  color: var(--campuscare-crimson);
+}
+
+.welcome-sub {
+  max-width: 32rem;
+  color: #675b60;
+  font-size: 0.76rem;
+}
+
+.welcome-illustration {
+  position: absolute;
+  top: 50%;
+  right: 7%;
+  display: grid;
+  width: 8.5rem;
+  height: 8.5rem;
+  place-items: center;
+  transform: translateY(-50%) rotate(-9deg);
+  color: rgba(128, 0, 32, 0.22);
+  filter: drop-shadow(0 10px 12px rgba(81, 0, 16, 0.08));
+}
+
+.welcome-illustration::before {
+  position: absolute;
+  width: 6rem;
+  height: 6rem;
+  border: 1px solid rgba(128, 0, 32, 0.16);
+  border-radius: 1.4rem;
+  background: rgba(128, 0, 32, 0.035);
+  content: '';
+  transform: rotate(9deg);
+}
+
+.welcome-illustration svg {
+  position: relative;
+}
+
+.welcome-banner .file-case-btn {
+  position: absolute;
+  z-index: 3;
+  right: 1.6rem;
+  bottom: 1.35rem;
+  border-color: var(--campuscare-crimson);
+  background: var(--campuscare-crimson);
+  color: #fff;
+  box-shadow: 0 5px 14px rgba(128, 0, 32, 0.18);
+}
+
+.welcome-banner .file-case-btn:hover {
+  background: var(--campuscare-crimson-dark);
+}
+
+.welcome-banner .file-case-btn:active {
+  background: var(--campuscare-crimson-dark);
+}
+
+.tag-group {
+  margin-bottom: 0.45rem;
+}
+
+.college-tag {
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+}
+
+.dashboard-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 0.34fr);
+  align-items: start;
+  gap: 1.35rem;
+}
+
+.dashboard-primary {
+  display: grid;
+  min-width: 0;
+  gap: 1.35rem;
+}
+
+.metrics-row {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.9rem;
+}
+
+.metric-box {
+  padding: 1.05rem 1.1rem;
+  border: 1px solid #f0ebf7;
+  border-radius: 1rem;
+  box-shadow: 0 5px 16px rgba(52, 35, 75, 0.035);
+}
+
+.metric-label {
+  color: #81788e;
+  font-size: 0.72rem;
+}
+
+.summary-icon {
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  border-radius: 0.65rem;
+  background: var(--campuscare-crimson-soft);
+  color: var(--campuscare-crimson);
+}
+
+.metric-num {
+  color: #29233a;
+  font-size: 1.65rem;
+}
+
+.metric-sub {
+  color: #9a92a8;
+  font-size: 0.68rem;
+}
+
+.grievance-section {
+  gap: 0.85rem;
+}
+
+.section-title {
+  color: #2b2638;
+  font-size: 1rem;
+}
+
+.link-view {
+  color: var(--campuscare-crimson);
+}
+
+.dashboard-empty-grievances,
+.case-card {
+  border-color: #f0ebf7;
+  border-radius: 1rem;
+}
+
+.case-card {
+  box-shadow: 0 5px 16px rgba(52, 35, 75, 0.035);
+}
+
+.dashboard-aside {
+  min-width: 0;
+}
+
+.daily-notice-card {
+  padding: 1.1rem;
+  border: 1px solid #f0ebf7;
+  border-radius: 1rem;
+  background: #fff;
+  box-shadow: 0 5px 16px rgba(52, 35, 75, 0.035);
+}
+
+.daily-notice-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.daily-notice-eyebrow {
+  color: #a092b1;
+  font-size: 0.53rem;
+  font-weight: 750;
+  letter-spacing: 0.12em;
+}
+
+.daily-notice-heading h2 {
+  margin-top: 0.2rem;
+  color: #2b2638;
+  font-size: 0.96rem;
+  font-weight: 750;
+}
+
+.daily-notice-heading > button {
+  border: 0;
+  background: transparent;
+  color: var(--campuscare-crimson);
+  font: inherit;
+  font-size: 0.65rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.daily-notice-heading > button:hover {
+  text-decoration: underline;
+}
+
+.daily-notice-list {
+  display: grid;
+  list-style: none;
+}
+
+.daily-notice-list li + li {
+  border-top: 1px solid #f2eef7;
+}
+
+.daily-notice-item {
+  display: flex;
+  width: 100%;
+  align-items: flex-start;
+  gap: 0.6rem;
+  padding: 0.75rem 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.daily-notice-item:hover strong {
+  color: var(--campuscare-crimson-dark);
+}
+
+.daily-notice-dot {
+  width: 0.45rem;
+  height: 0.45rem;
+  flex: 0 0 auto;
+  margin-top: 0.3rem;
+  border-radius: 50%;
+  background: var(--campuscare-crimson);
+  box-shadow: 0 0 0 3px var(--campuscare-crimson-soft);
+}
+
+.daily-notice-item > span:last-child {
+  display: grid;
+  min-width: 0;
+  gap: 0.22rem;
+}
+
+.daily-notice-item strong {
+  color: #302a3b;
+  font-size: 0.69rem;
+  font-weight: 750;
+  line-height: 1.35;
+}
+
+.daily-notice-item small {
+  overflow: hidden;
+  color: #8d8598;
+  font-size: 0.61rem;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+}
+
+.daily-notice-item .daily-notice-status {
+  color: #a59bad;
+}
+
+.daily-notice-empty {
+  display: grid;
+  min-height: 8rem;
+  align-content: center;
+  justify-items: center;
+  gap: 0.65rem;
+  padding: 1rem;
+  color: #9b6877;
+  text-align: center;
+}
+
+.daily-notice-empty p {
+  max-width: 13rem;
+  color: #8d8598;
+  font-size: 0.68rem;
+  line-height: 1.5;
+}
+
+.notice-submit-button {
+  display: flex;
+  width: 100%;
+  min-height: 2.5rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  margin-top: 0.7rem;
+  border: 0;
+  border-radius: 0.7rem;
+  background: var(--campuscare-crimson);
+  color: #fff;
+  font: inherit;
+  font-size: 0.7rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 0.16s ease, transform 0.16s ease;
+}
+
+.notice-submit-button:hover {
+  background: var(--campuscare-crimson-dark);
+  transform: translateY(-1px);
+}
+
+.footer {
+  padding: 1rem clamp(1.25rem, 3vw, 2.5rem);
+  border: 0;
+  color: #9a92a8;
+  font-size: 0.66rem;
+}
+
+.student-help-intro,
+.student-help-card,
+.student-help-faq {
+  border-color: #f0ebf7;
+  border-radius: 1rem;
+}
+
+.student-help-icon,
+.student-help-card-icon {
+  background: var(--campuscare-crimson-soft);
+  color: var(--campuscare-crimson);
+}
+
+.student-help-action {
+  border-color: var(--campuscare-crimson);
+  background: var(--campuscare-crimson);
+}
+
+.student-help-action:hover {
+  background: var(--campuscare-crimson-dark);
+}
+
+.student-help-action.secondary {
+  color: var(--campuscare-crimson-dark);
+}
+
+@media (max-width: 900px) {
+  .student-portal-shell {
+    flex-direction: column;
+  }
+
+  .student-sidebar {
+    width: auto;
+    flex: 0 0 auto;
+    gap: 0.8rem;
+    margin: 0.8rem;
+    padding: 0.8rem;
+  }
+
+  .student-sidebar-brand {
+    align-self: flex-start;
+  }
+
+  .student-sidebar-nav {
+    display: flex;
+    gap: 0.35rem;
+    overflow-x: auto;
+  }
+
+  .student-sidebar-link {
+    width: auto;
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
+  .student-sidebar-link.active {
+    box-shadow: inset 0 -3px #fff;
+  }
+
+  .student-sidebar-logout {
+    position: absolute;
+    right: 1.6rem;
+    top: 1.55rem;
+    width: auto;
+    min-height: 2.4rem;
+    padding: 0.55rem;
+  }
+
+  .student-sidebar-logout span {
+    display: none;
+  }
+
+  .dashboard-columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dashboard-aside {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .dashboard-container {
+    padding: 0;
+    background: #fff;
+  }
+
+  .student-portal-shell {
+    min-height: 100vh;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .student-sidebar {
+    gap: 0.65rem;
+    margin: 0.65rem;
+    padding: 0.65rem;
+  }
+
+  .student-sidebar-brand {
+    padding-right: 3rem;
+  }
+
+  .student-sidebar-logo {
+    width: 2.4rem;
+    height: 2.4rem;
+  }
+
+  .student-sidebar-nav {
+    scrollbar-width: thin;
+  }
+
+  .student-sidebar-link {
+    min-height: 2.4rem;
+    padding: 0.5rem 0.6rem;
+    font-size: 0.67rem;
+  }
+
+  .student-sidebar-link svg {
+    width: 15px;
+  }
+
+  .student-sidebar-logout {
+    top: 1.25rem;
+    right: 1.3rem;
+  }
+
+  .student-topbar {
+    min-height: 4.5rem;
+    padding: 0.5rem 1rem;
+  }
+
+  .student-topbar-title span {
+    font-size: 0.52rem;
+  }
+
+  .student-topbar-actions {
+    gap: 0.5rem;
+  }
+
+  .student-profile {
+    gap: 0.4rem;
+  }
+
+  .student-profile-avatar {
+    width: 2rem;
+    height: 2rem;
+  }
+
+  .student-profile-copy {
+    max-width: 7.5rem;
+  }
+
+  .student-profile-copy small {
+    max-width: 7.5rem;
+  }
+
+  .main-content {
+    gap: 1rem;
+    padding: 0.5rem 1rem 1.5rem;
+  }
+
+  .welcome-banner {
+    min-height: 12.5rem;
+    padding: 1.15rem;
+  }
+
+  .welcome-info {
+    max-width: 100%;
+  }
+
+  .welcome-date {
+    margin-bottom: 0.85rem;
+  }
+
+  .welcome-heading {
+    max-width: 18rem;
+    font-size: 1.35rem;
+  }
+
+  .welcome-sub {
+    max-width: 19rem;
+    padding-right: 1rem;
+    font-size: 0.69rem;
+  }
+
+  .welcome-illustration {
+    top: auto;
+    right: 0.6rem;
+    bottom: 0.8rem;
+    width: 4.8rem;
+    height: 4.8rem;
+    transform: rotate(-9deg);
+  }
+
+  .welcome-illustration svg {
+    width: 4.8rem;
+  }
+
+  .welcome-illustration::before {
+    width: 3.8rem;
+    height: 3.8rem;
+    border-radius: 1rem;
+  }
+
+  .welcome-banner .file-case-btn {
+    right: auto;
+    bottom: 0.85rem;
+    left: 1.15rem;
+    padding: 0.48rem 0.7rem;
+    font-size: 0.68rem;
+  }
+
+  .welcome-banner .file-case-icon-badge {
+    width: 1.5rem;
+    height: 1.5rem;
+  }
+
+  .metrics-row {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.5rem;
+  }
+
+  .metric-box {
+    min-width: 0;
+    padding: 0.75rem 0.65rem;
+    border-radius: 0.8rem;
+  }
+
+  .metric-top {
+    align-items: flex-start;
+    gap: 0.25rem;
+  }
+
+  .metric-label {
+    font-size: 0.6rem;
+    line-height: 1.35;
+  }
+
+  .summary-icon {
+    width: 1.6rem;
+    height: 1.6rem;
+    flex: 0 0 auto;
+  }
+
+  .summary-icon svg {
+    width: 14px;
+  }
+
+  .metric-num {
+    font-size: 1.35rem;
+  }
+
+  .metric-sub {
+    font-size: 0.58rem;
+    line-height: 1.35;
+  }
+
+  .daily-notice-card {
+    padding: 0.9rem;
+  }
+}

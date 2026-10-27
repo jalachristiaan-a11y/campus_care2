@@ -180,6 +180,10 @@
   color: #15803d;
 }
 
+.my-grievance-status.withdrawn {
+  color: #64748b;
+}
+
 .my-grievance-department,
 .my-grievance-date,
 .my-grievance-updated {
@@ -211,6 +215,57 @@
 .my-grievance-track-button:focus-visible {
   outline: 3px solid rgba(128, 0, 32, 0.22);
   outline-offset: 2px;
+}
+
+.my-grievance-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  margin-top: 0.65rem;
+}
+
+.my-grievance-edit-button,
+.my-grievance-withdraw-button {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #475569;
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.my-grievance-edit-button:hover {
+  border-color: #800020;
+  color: #800020;
+}
+
+.my-grievance-withdraw-button {
+  border-color: #fecaca;
+  color: #991b1b;
+}
+
+.my-grievance-withdraw-button:hover:not(:disabled) {
+  background: #fef2f2;
+}
+
+.my-grievance-withdraw-button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.my-grievance-edit-button:focus-visible,
+.my-grievance-withdraw-button:focus-visible {
+  outline: 3px solid rgba(128, 0, 32, 0.22);
+  outline-offset: 2px;
+}
+
+.my-grievance-action-error {
+  margin-top: 0.6rem;
+  color: #991b1b;
+  font-size: 0.78rem;
 }
 
 .ticket-tracking {
@@ -272,6 +327,11 @@
   color: #15803d;
 }
 
+.ticket-tracking-current-status.withdrawn {
+  background: #f1f5f9;
+  color: #475569;
+}
+
 .ticket-tracking-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 0.9fr);
@@ -285,6 +345,62 @@
   border: 1px solid #e2e8f0;
   border-radius: 12px;
   background: #ffffff;
+}
+
+.ticket-tracking-activity h2 {
+  margin-bottom: 0.9rem;
+  color: #0f172a;
+  font-size: 1rem;
+}
+
+.ticket-tracking-activity > p {
+  color: #64748b;
+  font-size: 0.8rem;
+}
+
+.ticket-tracking-activity-error {
+  color: #991b1b !important;
+}
+
+.ticket-tracking-activity ol {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.ticket-tracking-activity li {
+  padding: 0.85rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 9px;
+  background: #f8fafc;
+}
+
+.ticket-tracking-activity li > div {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.4rem 1rem;
+}
+
+.ticket-tracking-activity strong {
+  color: #334155;
+  font-size: 0.75rem;
+  text-transform: capitalize;
+}
+
+.ticket-tracking-activity time {
+  color: #64748b;
+  font-size: 0.68rem;
+}
+
+.ticket-tracking-activity li > p {
+  margin: 0.45rem 0 0;
+  color: #475569;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .ticket-tracking-label {

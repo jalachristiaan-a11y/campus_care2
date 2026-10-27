@@ -1,39 +1,68 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Bell, ClipboardList, HelpCircle, LogOut, MapPin, ShieldCheck } from 'lucide-react';
+import {
+  Bell,
+  ClipboardList,
+  FilePlus2,
+  HelpCircle,
+  LayoutDashboard,
+  LogOut,
+  MapPin,
+  ShieldCheck,
+} from 'lucide-react';
+import campusCareLogo from './assets/campuscare-logo.png';
 import './Dashboard.css';
 import MyGrievances from './MyGrievances.jsx';
-import { getStudentMessages } from './grievanceStore.js';
+import LogoutConfirmation from './LogoutConfirmation.jsx';
+import { apiRequest } from './apiClient.js';
 
 const Dashboard = ({
-  user = {},
+  user: suppliedUser,
   grievances: savedGrievances = [],
   grievanceError = '',
   onFileGrievance,
+  onUpdateGrievance,
+  onWithdrawGrievance,
   onLogout,
+  token,
   initialTab = 'Dashboard',
 }) => {
+  const user = suppliedUser ?? {};
   const [activeTab, setActiveTab] = useState(initialTab);
+  const [logoutConfirmationOpen, setLogoutConfirmationOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [readNotificationIds, setReadNotificationIds] = useState(() => new Set());
-  const [studentMessages, setStudentMessages] = useState(() => getStudentMessages());
+  const [studentMessages, setStudentMessages] = useState([]);
+  const [noticeError, setNoticeError] = useState('');
   const notificationPanelRef = useRef(null);
   const rawName = user?.fullName
     || (user?.universityEmail ? user.universityEmail.split('@')[0].replace(/[._-]/g, ' ') : '');
   const cleanName = rawName?.trim().toLowerCase();
 
   const displayName = (!rawName || cleanName === 'student id' || cleanName === 'student')
-    ? 'Maya Vance'
+    ? 'Student'
     : rawName
         .split(' ')
         .filter(Boolean)
         .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
         .join(' ');
 
-  const studentId = user?.studentId || '2025-03461';
+  const studentId = user?.studentId || '';
+  const studentInitials = displayName
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join('')
+    .toUpperCase();
+  const today = new Date().toLocaleDateString(undefined, {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  });
 
   const grievances = savedGrievances;
   const activeGrievanceCount = grievances.filter(
-    (grievance) => grievance.statusClass !== 'closed',
+    (grievance) => !['closed', 'withdrawn'].includes(grievance.statusClass),
   ).length;
   const resolvedGrievanceCount = grievances.filter(
     (grievance) => grievance.statusClass === 'closed',
@@ -65,6 +94,8 @@ const Dashboard = ({
         kind: 'grievance',
         title: grievance.statusClass === 'closed'
           ? 'Grievance resolved'
+          : grievance.statusClass === 'withdrawn'
+            ? 'Grievance withdrawn'
           : grievance.statusClass === 'progress'
             ? 'Grievance in progress'
             : 'Grievance under review',
@@ -107,136 +138,166 @@ const Dashboard = ({
   };
 
   useEffect(() => {
-    const refreshMessages = () => {
-      setStudentMessages(getStudentMessages());
+    if (!token) return undefined;
+    let active = true;
+    const refreshMessages = async () => {
+      try {
+        const result = await apiRequest('/api/notices', token);
+        if (active) {
+          setStudentMessages(result.notices);
+          setNoticeError('');
+        }
+      } catch (error) {
+        if (active) {
+          setNoticeError(error instanceof Error ? error.message : 'Unable to load notices.');
+        }
+      }
     };
 
-    window.addEventListener('campuscare:messages-updated', refreshMessages);
-    window.addEventListener('storage', refreshMessages);
+    refreshMessages();
+    const intervalId = window.setInterval(refreshMessages, 15000);
     return () => {
-      window.removeEventListener('campuscare:messages-updated', refreshMessages);
-      window.removeEventListener('storage', refreshMessages);
+      active = false;
+      window.clearInterval(intervalId);
     };
-  }, []);
+  }, [token]);
 
   return (
     <div className="dashboard-container">
-      {/* Navigation Header */}
-      <header className="navbar">
-        <div className="nav-left">
-          <div className="brand">
-            <div className="brand-logo">
-              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#800020" strokeWidth="2">
-                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
-              </svg>
-            </div>
-            <div className="brand-text">
-              <span className="brand-name">WMSU CampusCare</span>
-              <span className="brand-sub">Student Grievance &amp; Redressal Portal</span>
-            </div>
-          </div>
+      <div className="student-portal-shell">
+        <aside className="student-sidebar">
+          <a className="student-sidebar-brand" href="#dashboard" aria-label="CampusCare dashboard">
+            <span className="student-sidebar-logo">
+              <img src={campusCareLogo} alt="" aria-hidden="true" />
+            </span>
+            <span>
+              <strong>CampusCare</strong>
+              <small>WMSU · SCGTS</small>
+            </span>
+          </a>
 
-          <nav className="nav-menu">
-            {['Dashboard', 'My Grievances', 'Submit Case', 'Help & Support'].map((tab) => (
+          <nav className="student-sidebar-nav" aria-label="Student navigation">
+            {[
+              { label: 'Dashboard', icon: LayoutDashboard },
+              { label: 'My Grievances', icon: ClipboardList },
+              { label: 'Submit Case', icon: FilePlus2 },
+              { label: 'Help & Support', icon: HelpCircle },
+            ].map(({ label, icon: Icon }) => (
               <button
-                key={tab}
-                className={`nav-item ${activeTab === tab ? 'active' : ''}`}
+                type="button"
+                key={label}
+                className={`student-sidebar-link${activeTab === label ? ' active' : ''}`}
+                aria-current={activeTab === label ? 'page' : undefined}
                 onClick={() => {
-                  setActiveTab(tab);
-                  if (tab === 'Submit Case') {
-                    onFileGrievance?.();
-                  }
+                  setActiveTab(label);
+                  if (label === 'Submit Case') onFileGrievance?.();
                 }}
               >
-                {tab}
+                <Icon size={17} aria-hidden="true" />
+                <span>{label}</span>
               </button>
             ))}
-            <button
-              type="button"
-              className="student-logout-button"
-              onClick={onLogout}
-            >
-              <LogOut size={15} aria-hidden="true" />
-              <span>Log out</span>
-            </button>
           </nav>
-        </div>
-        <div className="nav-right">
-          <div className="student-notifications" ref={notificationPanelRef}>
-            <button
-              type="button"
-              className="student-notifications-button"
-              aria-label={`Notifications${unreadNotificationCount ? `, ${unreadNotificationCount} unread` : ''}`}
-              aria-haspopup="dialog"
-              aria-expanded={notificationsOpen}
-              aria-controls="student-notification-panel"
-              onClick={() => setNotificationsOpen((isOpen) => !isOpen)}
-            >
-              <Bell size={18} aria-hidden="true" />
-              {unreadNotificationCount > 0 && (
-                <span className="student-notifications-count">{unreadNotificationCount}</span>
-              )}
-            </button>
 
-            {notificationsOpen && (
-              <section
-                id="student-notification-panel"
-                className="student-notifications-panel"
-                role="dialog"
-                aria-label="Student notifications"
-              >
-                <div className="student-notifications-heading">
-                  <div>
-                    <h2>Notifications</h2>
-                    <p>{unreadNotificationCount ? `${unreadNotificationCount} unread` : 'All caught up'}</p>
-                  </div>
+          <button
+            type="button"
+            className="student-sidebar-logout"
+            onClick={() => setLogoutConfirmationOpen(true)}
+          >
+            <LogOut size={17} aria-hidden="true" />
+            <span>Log out</span>
+          </button>
+        </aside>
+
+        <div className="student-workspace">
+          <header className="student-topbar">
+            <div className="student-topbar-title">
+              <span>STUDENT PORTAL</span>
+              <strong>{activeTab}</strong>
+            </div>
+            <div className="student-topbar-actions">
+              <div className="student-profile">
+                <span className="student-profile-avatar" aria-hidden="true">{studentInitials}</span>
+                <span className="student-profile-copy">
+                  <strong>{displayName}</strong>
+                  <small>{user?.studentId || user?.universityEmail || 'WMSU Student'}</small>
+                </span>
+              </div>
+              <div className="student-notifications" ref={notificationPanelRef}>
+                <button
+                  type="button"
+                  className="student-notifications-button"
+                  aria-label={`Notifications${unreadNotificationCount ? `, ${unreadNotificationCount} unread` : ''}`}
+                  aria-haspopup="dialog"
+                  aria-expanded={notificationsOpen}
+                  aria-controls="student-notification-panel"
+                  onClick={() => setNotificationsOpen((isOpen) => !isOpen)}
+                >
+                  <Bell size={18} aria-hidden="true" />
                   {unreadNotificationCount > 0 && (
-                    <button
-                      type="button"
-                      className="student-notifications-mark-read"
-                      onClick={() => setReadNotificationIds(new Set(studentNotifications.map((item) => item.id)))}
-                    >
-                      Mark all read
-                    </button>
+                    <span className="student-notifications-count">{unreadNotificationCount}</span>
                   )}
-                </div>
+                </button>
 
-                {studentNotifications.length > 0 ? (
-                  <ul className="student-notifications-list">
-                    {studentNotifications.map((notification) => {
-                      const isUnread = !readNotificationIds.has(notification.id);
-                      return (
-                        <li key={notification.id}>
-                          <button
-                            type="button"
-                            className={`student-notification-item${isUnread ? ' unread' : ''}`}
-                            onClick={() => openStudentGrievance(notification)}
-                          >
-                            <span className={`student-notification-dot${isUnread ? ' unread' : ''}`} />
-                            <span className="student-notification-content">
-                              <span className="student-notification-title">
-                                {notification.title}
-                                {isUnread && <span className="student-notification-new">NEW</span>}
-                              </span>
-                              <span className="student-notification-details">{notification.details}</span>
-                              {notification.body && (
-                                <span className="student-notification-message">{notification.body}</span>
-                              )}
-                              <span className="student-notification-status">{notification.status} · View grievances</span>
-                            </span>
-                          </button>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                ) : (
-                  <p className="student-notifications-empty">No grievance notifications yet.</p>
+                {notificationsOpen && (
+                  <section
+                    id="student-notification-panel"
+                    className="student-notifications-panel"
+                    role="dialog"
+                    aria-label="Student notifications"
+                  >
+                    <div className="student-notifications-heading">
+                      <div>
+                        <h2>Notifications</h2>
+                        <p>{unreadNotificationCount ? `${unreadNotificationCount} unread` : 'All caught up'}</p>
+                      </div>
+                      {unreadNotificationCount > 0 && (
+                        <button
+                          type="button"
+                          className="student-notifications-mark-read"
+                          onClick={() => setReadNotificationIds(new Set(studentNotifications.map((item) => item.id)))}
+                        >
+                          Mark all read
+                        </button>
+                      )}
+                    </div>
+
+                    {studentNotifications.length > 0 ? (
+                      <ul className="student-notifications-list">
+                        {studentNotifications.map((notification) => {
+                          const isUnread = !readNotificationIds.has(notification.id);
+                          return (
+                            <li key={notification.id}>
+                              <button
+                                type="button"
+                                className={`student-notification-item${isUnread ? ' unread' : ''}`}
+                                onClick={() => openStudentGrievance(notification)}
+                              >
+                                <span className={`student-notification-dot${isUnread ? ' unread' : ''}`} />
+                                <span className="student-notification-content">
+                                  <span className="student-notification-title">
+                                    {notification.title}
+                                    {isUnread && <span className="student-notification-new">NEW</span>}
+                                  </span>
+                                  <span className="student-notification-details">{notification.details}</span>
+                                  {notification.body && (
+                                    <span className="student-notification-message">{notification.body}</span>
+                                  )}
+                                  <span className="student-notification-status">{notification.status} · View grievances</span>
+                                </span>
+                              </button>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    ) : (
+                      <p className="student-notifications-empty">No grievance notifications yet.</p>
+                    )}
+                  </section>
                 )}
-              </section>
-            )}
-          </div>
-        </div>
-      </header>
+              </div>
+            </div>
+          </header>
 
       {/* Main Content */}
       <main className="main-content">
@@ -252,11 +313,8 @@ const Dashboard = ({
               <div className="tag-group">
                 <span className="info-tag college-tag">{user.college}</span>
               </div>
-            ) : (
-              <div className="tag-group">
-                <span className="info-tag college-tag">College of Computing Studies</span>
-              </div>
-            )}
+            ) : null}
+            <p className="welcome-date">{today}</p>
             <h1 className="welcome-heading">Welcome back, {displayName}</h1>
             {studentId && (
               <p className="welcome-student-id">
@@ -282,6 +340,9 @@ const Dashboard = ({
             </span>
             <span>File New Grievance</span>
           </button>
+          <div className="welcome-illustration" aria-hidden="true">
+            <ShieldCheck size={116} strokeWidth={1.2} />
+          </div>
         </section>
 
         {activeTab === 'Help & Support' ? (
@@ -353,68 +414,41 @@ const Dashboard = ({
         ) : activeTab === 'My Grievances' ? (
           <MyGrievances
             grievances={grievances}
+            token={token}
             onNewGrievance={onFileGrievance}
+            onUpdateGrievance={onUpdateGrievance}
+            onWithdrawGrievance={onWithdrawGrievance}
           />
         ) : (
           <>
-        {/* Metrics Grid */}
-        <section className="metrics-row">
-          <div className="metric-box">
-            <div className="metric-top">
-              <span className="metric-label">Active Cases</span>
-              <div className="icon-wrap orange">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#d97706" strokeWidth="2">
-                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                  <polyline points="14 2 14 8 20 8"/>
-                </svg>
-              </div>
-            </div>
-            <div className="metric-num">{activeGrievanceCount}</div>
-            <div className="metric-sub">Cases requiring follow-up</div>
-          </div>
-
-          <div className="metric-box">
-            <div className="metric-top">
-              <span className="metric-label">Resolved Cases</span>
-              <div className="icon-wrap green">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#16a34a" strokeWidth="2">
-                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-                  <polyline points="22 4 12 14.01 9 11.01"/>
-                </svg>
-              </div>
-            </div>
-            <div className="metric-num">{resolvedGrievanceCount}</div>
-            <div className="metric-sub">View resolution letters</div>
-          </div>
-
-          <div className="metric-box">
-            <div className="metric-top">
-              <span className="metric-label">Saved Drafts</span>
-              <div className="icon-wrap blue">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#2563eb" strokeWidth="2">
-                  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
-                  <polyline points="17 21 17 13 7 13 7 21"/>
-                </svg>
-              </div>
-            </div>
-            <div className="metric-num">1</div>
-            <div className="metric-sub">Ready to complete</div>
-          </div>
-
-          <div className="metric-box">
-            <div className="metric-top">
-              <span className="metric-label">Redressal Rate</span>
-              <div className="icon-wrap purple">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#7c3aed" strokeWidth="2">
-                  <circle cx="12" cy="12" r="10"/>
-                  <path d="M12 8v4l3 3"/>
-                </svg>
-              </div>
-            </div>
-            <div className="metric-num">98%</div>
-            <div className="metric-sub">Within standard 14 days</div>
-          </div>
-        </section>
+        <div className="dashboard-columns">
+          <div className="dashboard-primary">
+            <section className="metrics-row" aria-label="Grievance summary">
+              <article className="metric-box">
+                <div className="metric-top">
+                  <span className="metric-label">Total Cases</span>
+                  <span className="summary-icon"><ClipboardList size={18} aria-hidden="true" /></span>
+                </div>
+                <div className="metric-num">{grievances.length}</div>
+                <div className="metric-sub">Concerns submitted</div>
+              </article>
+              <article className="metric-box">
+                <div className="metric-top">
+                  <span className="metric-label">Active Cases</span>
+                  <span className="summary-icon"><Bell size={18} aria-hidden="true" /></span>
+                </div>
+                <div className="metric-num">{activeGrievanceCount}</div>
+                <div className="metric-sub">Currently being reviewed</div>
+              </article>
+              <article className="metric-box">
+                <div className="metric-top">
+                  <span className="metric-label">Resolved Cases</span>
+                  <span className="summary-icon"><ShieldCheck size={18} aria-hidden="true" /></span>
+                </div>
+                <div className="metric-num">{resolvedGrievanceCount}</div>
+                <div className="metric-sub">Completed concerns</div>
+              </article>
+            </section>
 
         {/* Grievances Section */}
         <section className="grievance-section">
@@ -479,6 +513,45 @@ const Dashboard = ({
             </div>
           )}
         </section>
+          </div>
+
+          <aside className="dashboard-aside">
+            <section className="daily-notice-card" aria-labelledby="daily-notice-title">
+              <div className="daily-notice-heading">
+                <div>
+                  <span className="daily-notice-eyebrow">CAMPUSCARE</span>
+                  <h2 id="daily-notice-title">Recent updates</h2>
+                </div>
+                <button type="button" onClick={() => setNotificationsOpen(true)}>See all</button>
+              </div>
+              {studentNotifications.length ? (
+                <ul className="daily-notice-list">
+                  {studentNotifications.slice(0, 4).map((notification) => (
+                    <li key={`notice:${notification.id}`}>
+                      <button type="button" className="daily-notice-item" onClick={() => openStudentGrievance(notification)}>
+                        <span className="daily-notice-dot" aria-hidden="true" />
+                        <span>
+                          <strong>{notification.title}</strong>
+                          <small>{notification.details}</small>
+                          <small className="daily-notice-status">{notification.status}</small>
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <div className="daily-notice-empty">
+                  <Bell size={20} aria-hidden="true" />
+                  <p>{noticeError || 'Updates about your submitted concerns will appear here.'}</p>
+                </div>
+              )}
+              <button type="button" className="notice-submit-button" onClick={onFileGrievance}>
+                <FilePlus2 size={16} aria-hidden="true" />
+                <span>Submit a concern</span>
+              </button>
+            </section>
+          </aside>
+        </div>
           </>
         )}
       </main>
@@ -491,6 +564,14 @@ const Dashboard = ({
           <span>Office of Student Affairs &amp; Grievances</span>
         </div>
       </footer>
+        </div>
+      </div>
+      {logoutConfirmationOpen && (
+        <LogoutConfirmation
+          onCancel={() => setLogoutConfirmationOpen(false)}
+          onConfirm={onLogout}
+        />
+      )}
     </div>
   );
 };

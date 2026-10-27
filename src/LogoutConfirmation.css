@@ -1,0 +1,111 @@
+.logout-confirmation-overlay {
+  position: fixed;
+  z-index: 1100;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  overflow-y: auto;
+  padding: 1rem;
+  background: rgba(15, 23, 42, 0.52);
+  backdrop-filter: blur(5px);
+}
+
+.logout-confirmation-dialog {
+  width: min(100%, 26rem);
+  padding: 2rem;
+  border: 1px solid #f1e4e7;
+  border-radius: 1.25rem;
+  background: #fff;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.24);
+  text-align: center;
+  animation: logout-confirmation-appear 180ms ease-out both;
+}
+
+@keyframes logout-confirmation-appear {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.logout-confirmation-icon {
+  display: grid;
+  width: 3.25rem;
+  height: 3.25rem;
+  place-items: center;
+  margin: 0 auto 1rem;
+  border-radius: 50%;
+  background: #fff1f3;
+  color: #800020;
+}
+
+.logout-confirmation-dialog h2 {
+  margin: 0;
+  color: #1e293b;
+  font-size: 1.2rem;
+  font-weight: 750;
+}
+
+.logout-confirmation-dialog p {
+  margin: 0.55rem 0 1.5rem;
+  color: #64748b;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.logout-confirmation-actions {
+  display: flex;
+  justify-content: center;
+  gap: 0.7rem;
+}
+
+.logout-confirmation-actions button {
+  min-height: 2.7rem;
+  padding: 0.65rem 1rem;
+  border: 1px solid transparent;
+  border-radius: 0.7rem;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 150ms ease, border-color 150ms ease;
+}
+
+.logout-confirmation-no {
+  border-color: #e2e8f0 !important;
+  background: #fff;
+  color: #475569;
+}
+
+.logout-confirmation-no:hover {
+  background: #f8fafc;
+}
+
+.logout-confirmation-yes {
+  background: #800020;
+  color: #fff;
+}
+
+.logout-confirmation-yes:hover {
+  background: #66001a;
+}
+
+.logout-confirmation-actions button:focus-visible {
+  outline: 3px solid rgba(128, 0, 32, 0.3);
+  outline-offset: 2px;
+}
+
+@media (max-width: 420px) {
+  .logout-confirmation-dialog {
+    padding: 1.5rem 1.1rem;
+  }
+
+  .logout-confirmation-actions {
+    flex-direction: column-reverse;
+  }
+}

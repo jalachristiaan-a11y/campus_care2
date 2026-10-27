@@ -1,6 +1,7 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import './SubmitGrievance.css';
 import ConfirmationModal from './ConfirmationModal.jsx';
+import { apiRequest } from './apiClient.js';
 
 const categories = [
   'Academic Affairs',
@@ -11,20 +12,54 @@ const categories = [
   'Other',
 ];
 
-export default function SubmitGrievance({ user = {}, onCancel, onSubmit, onViewTickets }) {
+export default function SubmitGrievance({
+  user: suppliedUser,
+  token,
+  editingGrievance = null,
+  onCancel,
+  onSubmit,
+  onViewTickets,
+}) {
+  const isEditing = Boolean(editingGrievance);
+  const user = suppliedUser ?? {};
   const attachmentInputRef = useRef(null);
-  const [formData, setFormData] = useState({
-    category: '',
-    title: '',
-    location: '',
-    description: '',
-    attachment: null,
+  const [formData, setFormData] = useState(() => ({
+    category: editingGrievance?.category ?? '',
+    title: editingGrievance?.title ?? '',
+    location: editingGrievance?.location ?? '',
+    description: editingGrievance?.description ?? '',
+    attachment: editingGrievance?.attachment ?? null,
     confirmAccurate: false,
-  });
+  }));
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isReadingImage, setIsReadingImage] = useState(false);
   const [submittedGrievance, setSubmittedGrievance] = useState(null);
   const [submitError, setSubmitError] = useState('');
+  const [intakeOpen, setIntakeOpen] = useState(isEditing ? true : null);
+  const [settingsError, setSettingsError] = useState('');
+
+  useEffect(() => {
+    if (isEditing) return undefined;
+
+    let active = true;
+    apiRequest('/api/settings', token)
+      .then((result) => {
+        if (typeof result.settings?.intakeOpen !== 'boolean') {
+          throw new Error('The portal returned an invalid intake setting.');
+        }
+        if (active) setIntakeOpen(result.settings.intakeOpen);
+      })
+      .catch((error) => {
+        if (active) {
+          setIntakeOpen(false);
+          setSettingsError(error instanceof Error ? error.message : 'Unable to check complaint intake.');
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [isEditing, token]);
 
   const handleChange = (event) => {
     const { name, value, type, checked } = event.target;
@@ -86,25 +121,30 @@ export default function SubmitGrievance({ user = {}, onCancel, onSubmit, onViewT
     }
   };
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault();
+    if (!isEditing && intakeOpen !== true) {
+      setSubmitError(settingsError || 'Complaint submissions are temporarily paused. Please try again later.');
+      return;
+    }
+
     setIsSubmitting(true);
     setSubmitError('');
 
     try {
-      const savedGrievance = onSubmit?.(formData);
+      const savedGrievance = await onSubmit?.(formData);
       if (!savedGrievance) {
-        throw new Error('Unable to save your grievance. Please try again.');
+        throw new Error(`Unable to ${isEditing ? 'update' : 'save'} your grievance. Please try again.`);
       }
       setSubmittedGrievance(savedGrievance);
-      setIsSubmitting(false);
     } catch (error) {
-      setIsSubmitting(false);
       setSubmitError(
         error instanceof Error
           ? error.message
           : 'Unable to save your grievance. Please try again.',
       );
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -116,23 +156,41 @@ export default function SubmitGrievance({ user = {}, onCancel, onSubmit, onViewT
           <span className="submit-grievance-subtitle">Student Grievance &amp; Redressal Portal</span>
         </div>
         <button type="button" className="submit-back-button" onClick={onCancel}>
-          Back to dashboard
+          {isEditing ? 'Back to My Grievances' : 'Back to dashboard'}
         </button>
       </header>
 
       <section className="submit-grievance-card">
         <div className="submit-grievance-heading">
-          <span className="submit-eyebrow">NEW SUBMISSION</span>
-          <h1>File a grievance</h1>
-          <p>Share the details of your concern. Your submission will be handled confidentially.</p>
+          <span className="submit-eyebrow">{isEditing ? 'UPDATE SUBMISSION' : 'NEW SUBMISSION'}</span>
+          <h1>{isEditing ? 'Edit your grievance' : 'File a grievance'}</h1>
+          <p>{isEditing
+            ? `Update the details for ${editingGrievance.id}. Editing is available while it is under review.`
+            : 'Share the details of your concern. Your submission will be handled confidentially.'}</p>
           {user.universityEmail && (
             <p className="submit-account">Submitting as {user.universityEmail}</p>
           )}
+          {settingsError && (
+            <p className="submit-error" role="alert">
+              Unable to check whether complaint submissions are open: {settingsError}
+            </p>
+          )}
+          {intakeOpen === false && !settingsError && (
+            <p className="submit-error" role="status">
+              Complaint submissions are temporarily paused. Please try again later.
+            </p>
+          )}
+          {intakeOpen === null && <p className="submit-account" role="status">Checking complaint intake…</p>}
         </div>
 
         {submitError && (
           <div className="submit-error" role="alert">
             {submitError}
+          </div>
+        )}
+        {isEditing && submittedGrievance && (
+          <div className="submit-success" role="status">
+            Your grievance was updated successfully.
           </div>
         )}
 
@@ -215,16 +273,18 @@ export default function SubmitGrievance({ user = {}, onCancel, onSubmit, onViewT
             </div>
           </div>
 
-          <label className="submit-confirmation">
-            <input
-              type="checkbox"
-              name="confirmAccurate"
-              checked={formData.confirmAccurate}
-              onChange={handleChange}
-              required
-            />
-            <span>I confirm that the information provided is accurate to the best of my knowledge.</span>
-          </label>
+          {!isEditing && (
+            <label className="submit-confirmation">
+              <input
+                type="checkbox"
+                name="confirmAccurate"
+                checked={formData.confirmAccurate}
+                onChange={handleChange}
+                required
+              />
+              <span>I confirm that the information provided is accurate to the best of my knowledge.</span>
+            </label>
+          )}
 
           <div className="submit-form-actions">
             <button type="button" className="submit-cancel-button" onClick={onCancel}>
@@ -233,14 +293,20 @@ export default function SubmitGrievance({ user = {}, onCancel, onSubmit, onViewT
             <button
               type="submit"
               className="submit-send-button"
-              disabled={isSubmitting || isReadingImage || Boolean(submittedGrievance)}
+              disabled={(!isEditing && intakeOpen !== true) || isSubmitting || isReadingImage}
             >
-              {isReadingImage ? 'Loading picture…' : isSubmitting ? 'Submitting…' : submittedGrievance ? 'Submitted' : 'Submit grievance'}
+              {(!isEditing && intakeOpen === false)
+                ? 'Intake paused'
+                : isReadingImage
+                  ? 'Loading picture…'
+                  : isSubmitting
+                    ? isEditing ? 'Saving…' : 'Submitting…'
+                    : isEditing ? 'Save changes' : 'Submit grievance'}
             </button>
           </div>
         </form>
       </section>
-      {submittedGrievance && (
+      {submittedGrievance && !isEditing && (
         <ConfirmationModal
           ticketId={`#${submittedGrievance.id}`}
           assignedDepartment={submittedGrievance.category}
