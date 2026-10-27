@@ -4,6 +4,7 @@ import {
   EyeOff,
   CheckCircle2,
 } from 'lucide-react';
+import campusCareAuthBackground from './assets/campuscare-auth-background.png';
 import CampusCareLanding from './CampusCareLanding.jsx';
 import Register from './Register.jsx';
 import Dashboard from './Dashboard.jsx';
@@ -347,7 +348,7 @@ export default function App() {
           <div
             className="absolute inset-0 bg-cover bg-center transition-transform duration-700 hover:scale-105"
             style={{
-              backgroundImage: `url('https://images.unsplash.com/photo-1541829070764-84a7d30dd3f3?q=80&w=1200&auto=format&fit=crop')`,
+              backgroundImage: `url("${campusCareAuthBackground}")`,
             }}
           />
 
@@ -357,7 +358,7 @@ export default function App() {
             <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight leading-tight">
               Welcome Home,
               <br />
-              <span className="text-[#00A3FF]">Normalite.</span>
+              <span className="text-[#00A3FF]">Crimsons.</span>
             </h1>
 
             <p className="text-gray-200 text-xs sm:text-sm leading-relaxed max-w-md font-normal opacity-90">

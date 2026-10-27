@@ -40,7 +40,7 @@
 
 .register-hero {
   position: relative;
-  background: #1e293b url('https://images.unsplash.com/photo-1541829070764-84a7d30dd3f3?q=80&w=1000&auto=format&fit=crop') center/cover no-repeat;
+  background: #1e293b url('./assets/campuscare-auth-background.png') center/cover no-repeat;
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
@@ -131,6 +131,10 @@
   font-weight: 600;
   cursor: pointer;
   transition: background-color 0.2s ease, transform 0.1s ease;
+}
+
+.submit-profile-button.secondary {
+  color: #800020;
 }
 
 .submit-profile-button:hover {

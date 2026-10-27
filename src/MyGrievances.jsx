@@ -20,7 +20,7 @@ const formatDate = (dateValue) => {
   }).format(date);
 };
 
-function TicketTracking({ grievance, onBack, token }) {
+function TicketTracking({ grievance, onBack, token, updateConfirmation }) {
   const [activityState, setActivityState] = useState({ complaintId: '', activity: [], error: '' });
   const isUnderReview = grievance.statusClass === 'review';
   const isInProgress = grievance.statusClass === 'progress';
@@ -105,6 +105,12 @@ function TicketTracking({ grievance, onBack, token }) {
           {grievance.status}
         </span>
       </header>
+
+      {updateConfirmation && (
+        <p className="ticket-tracking-update-success" role="status">
+          Grievance updated successfully.
+        </p>
+      )}
 
       <div className="ticket-tracking-grid">
         <article className="ticket-tracking-panel ticket-tracking-summary">
@@ -227,6 +233,7 @@ export default function MyGrievances({
   const [departmentFilter, setDepartmentFilter] = useState('All');
   const [trackedGrievance, setTrackedGrievance] = useState(null);
   const [editingGrievance, setEditingGrievance] = useState(null);
+  const [updateConfirmation, setUpdateConfirmation] = useState(false);
   const [withdrawingId, setWithdrawingId] = useState('');
   const [withdrawalError, setWithdrawalError] = useState({ id: '', message: '' });
 
@@ -278,6 +285,11 @@ export default function MyGrievances({
         editingGrievance={editingGrievance}
         onCancel={() => setEditingGrievance(null)}
         onSubmit={(formData) => onUpdateGrievance(editingGrievance.id, formData)}
+        onUpdateSuccess={(updatedGrievance) => {
+          setTrackedGrievance(updatedGrievance);
+          setEditingGrievance(null);
+          setUpdateConfirmation(true);
+        }}
       />
     );
   }
@@ -287,7 +299,11 @@ export default function MyGrievances({
       <TicketTracking
         grievance={trackedGrievance}
         token={token}
-        onBack={() => setTrackedGrievance(null)}
+        updateConfirmation={updateConfirmation}
+        onBack={() => {
+          setTrackedGrievance(null);
+          setUpdateConfirmation(false);
+        }}
       />
     );
   }

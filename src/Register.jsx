@@ -64,7 +64,7 @@ export default function Register({ onBackToLogin }) {
                 <br />
                 CampusCare,
                 <br />
-                <span className="hero-blue-accent">Normalite.</span>
+                <span className="hero-blue-accent">Crimsons.</span>
               </h1>
               <p className="hero-subtext">
                 Create your student account to submit and track your campus grievances securely.

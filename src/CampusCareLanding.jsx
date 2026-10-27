@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { CheckCircle2, Clock, Heart, HelpCircle, Lock, Mail, MapPin, MessageSquare, Phone, Send, ShieldAlert, Sparkles, ArrowUpRight, UserCheck, Users } from 'lucide-react';
 import campusBuildingBackground from './assets/campus-building-background.png';
+import campusCareLogo from './assets/campuscare-logo.png';
 export default function CampusCareLanding({ onLogin }) {
   const [contactStatus, setContactStatus] = useState('');
   const scrollToSection = (id) => {
@@ -96,7 +97,7 @@ export default function CampusCareLanding({ onLogin }) {
         <header className="sticky top-4 z-40 flex items-center justify-between rounded-full border border-slate-200/80 bg-white/90 px-4 py-3.5 shadow-sm backdrop-blur-md sm:px-6">
           <a href="#top" className="flex items-center gap-3" aria-label="CampusCare home">
             <span className="flex h-8 w-8 items-center justify-center rounded-full border border-rose-200 bg-rose-50 text-rose-600">
-              <ShieldAlert className="h-4 w-4" aria-hidden="true" />
+              <img src={campusCareLogo} alt="" aria-hidden="true" className="h-full w-full object-contain" />
             </span>
             <span className="flex items-center gap-2">
               <span className="text-base font-bold tracking-tight text-slate-900">CampusCare</span>
@@ -136,11 +137,6 @@ export default function CampusCareLanding({ onLogin }) {
               <button type="button" onClick={() => scrollToSection('about')} className="rounded-full border border-slate-200 bg-white px-6 py-3 text-sm font-medium text-slate-700 shadow-sm transition-colors hover:bg-slate-50">
                 About Us
               </button>
-            </div>
-            <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-xs font-medium text-slate-600">
-              <span className="flex items-center gap-1.5"><Lock className="h-3.5 w-3.5 text-rose-500" /> Guaranteed Protection | Official Complaint</span>
-              <span className="flex items-center gap-1.5"><Clock className="h-3.5 w-3.5 text-rose-500" /> 48-Hour Acknowledgment SLA</span>
-              <span className="flex items-center gap-1.5"><UserCheck className="h-3.5 w-3.5 text-rose-500" /> Campus Ombudsman Certified</span>
             </div>
           </section>
 

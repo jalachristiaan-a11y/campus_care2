@@ -18,6 +18,7 @@ export default function SubmitGrievance({
   editingGrievance = null,
   onCancel,
   onSubmit,
+  onUpdateSuccess,
   onViewTickets,
 }) {
   const isEditing = Boolean(editingGrievance);
@@ -131,12 +132,12 @@ export default function SubmitGrievance({
     setIsSubmitting(true);
     setSubmitError('');
 
+    let savedGrievance;
     try {
-      const savedGrievance = await onSubmit?.(formData);
+      savedGrievance = await onSubmit?.(formData);
       if (!savedGrievance) {
         throw new Error(`Unable to ${isEditing ? 'update' : 'save'} your grievance. Please try again.`);
       }
-      setSubmittedGrievance(savedGrievance);
     } catch (error) {
       setSubmitError(
         error instanceof Error
@@ -145,6 +146,12 @@ export default function SubmitGrievance({
       );
     } finally {
       setIsSubmitting(false);
+    }
+
+    if (savedGrievance && isEditing) {
+      onUpdateSuccess?.(savedGrievance);
+    } else if (savedGrievance) {
+      setSubmittedGrievance(savedGrievance);
     }
   };
 
