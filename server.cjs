@@ -1,9 +1,5 @@
 require('dotenv').config();
 
-if (!process.env.JWT_SECRET) {
-  throw new Error('JWT_SECRET is not configured.');
-}
-
 const express = require('express');
 const path = require('node:path');
 const db = require('./config/db.cjs');
@@ -11,8 +7,14 @@ const authRoutes = require('./routes/authRoutes.cjs');
 const complaintRoutes = require('./routes/complaintRoutes.cjs');
 const noticeRoutes = require('./routes/noticeRoutes.cjs');
 const settingsRoutes = require('./routes/settingsRoutes.cjs');
+const csrfProtection = require('./middleware/csrfProtection.cjs');
 
 const app = express();
+app.use('/api', (req, res, next) => {
+  res.set('Cache-Control', 'no-store');
+  next();
+});
+app.use('/api', csrfProtection);
 app.use(express.json({ limit: '3mb' }));
 
 app.use('/api/auth', authRoutes);

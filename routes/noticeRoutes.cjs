@@ -1,9 +1,9 @@
 const express = require('express');
 const db = require('../config/db.cjs');
-const { authenticateToken, authorizeRoles } = require('../middleware/authMiddleware.cjs');
+const { authenticateSession, authorizeRoles } = require('../middleware/authMiddleware.cjs');
 
 const router = express.Router();
-router.use(authenticateToken);
+router.use(authenticateSession);
 
 router.get('/', async (req, res) => {
   if (!['student', 'admin'].includes(req.user.role)) {

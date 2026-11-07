@@ -1,18 +1,24 @@
-import { useEffect, useState } from 'react';
-import { ArrowRight, Check, CheckCheck, Clock3, Copy, Folder, X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { AlertCircle, ArrowRight, Check, CheckCheck, Clock3, Copy, Folder, X } from 'lucide-react';
 import './ConfirmationModal.css';
 
 export default function ConfirmationModal({
   mode = 'confirmation',
+  isSubmitting = false,
+  error = '',
   ticketId,
   assignedDepartment,
   ticketStatus,
   statusClass,
   onClose,
+  onConfirm,
   onViewTickets,
   onReturnDashboard,
 }) {
   const [copyStatus, setCopyStatus] = useState('');
+  const submitButtonRef = useRef(null);
+  const promptDialogRef = useRef(null);
+  const isSubmitConfirmation = mode === 'submit-confirmation';
 
   useEffect(() => {
     if (copyStatus !== 'Copied!') {
@@ -34,6 +40,20 @@ export default function ConfirmationModal({
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [onClose]);
 
+  useEffect(() => {
+    if (!isSubmitConfirmation) return undefined;
+
+    const previouslyFocused = document.activeElement;
+    submitButtonRef.current?.focus();
+    return () => previouslyFocused?.focus?.();
+  }, [isSubmitConfirmation]);
+
+  useEffect(() => {
+    if (isSubmitConfirmation && isSubmitting) {
+      promptDialogRef.current?.focus();
+    }
+  }, [isSubmitConfirmation, isSubmitting]);
+
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(ticketId.replace(/^#/, ''));
@@ -43,10 +63,80 @@ export default function ConfirmationModal({
     }
   };
 
-  const departmentCouncil = assignedDepartment.endsWith('Council')
+  const departmentCouncil = assignedDepartment?.endsWith('Council')
     ? assignedDepartment
     : `${assignedDepartment} Council`;
   const isTracking = mode === 'tracking';
+
+  if (isSubmitConfirmation) {
+    return (
+      <div
+        className="confirmation-overlay"
+        onMouseDown={(event) => {
+          if (event.target === event.currentTarget) {
+            onClose?.();
+          }
+        }}
+      >
+        <section
+          ref={promptDialogRef}
+          className="confirmation-card confirmation-prompt-card"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="confirmation-prompt-title"
+          aria-describedby="confirmation-prompt-description"
+          tabIndex="-1"
+          onKeyDown={(event) => {
+            if (event.key !== 'Tab') return;
+
+            const buttons = event.currentTarget.querySelectorAll('button:not(:disabled)');
+            const firstButton = buttons[0];
+            const lastButton = buttons[buttons.length - 1];
+            if (!firstButton || !lastButton) {
+              event.preventDefault();
+              event.currentTarget.focus();
+              return;
+            }
+            if (event.shiftKey && document.activeElement === firstButton) {
+              event.preventDefault();
+              lastButton?.focus();
+            } else if (!event.shiftKey && document.activeElement === lastButton) {
+              event.preventDefault();
+              firstButton?.focus();
+            }
+          }}
+        >
+          <div className="confirmation-prompt-icon" aria-hidden="true">
+            <AlertCircle size={28} strokeWidth={2} />
+          </div>
+          <h2 id="confirmation-prompt-title">Submit this grievance?</h2>
+          <p id="confirmation-prompt-description" className="confirmation-description">
+            Once submitted, your grievance will be sent for review. You can track its status in My Tickets.
+          </p>
+          {error && <p className="confirmation-prompt-error" role="alert">{error}</p>}
+          <div className="confirmation-prompt-actions">
+            <button
+              type="button"
+              className="confirmation-secondary-button"
+              onClick={onClose}
+              disabled={isSubmitting}
+            >
+              Cancel
+            </button>
+            <button
+              ref={submitButtonRef}
+              type="button"
+              className="confirmation-primary-button"
+              onClick={onConfirm}
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? 'Submitting…' : error ? 'Try again' : 'Submit grievance'}
+            </button>
+          </div>
+        </section>
+      </div>
+    );
+  }
 
   return (
     <div

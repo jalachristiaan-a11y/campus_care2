@@ -13,8 +13,6 @@ const categories = [
 ];
 
 export default function SubmitGrievance({
-  user: suppliedUser,
-  token,
   editingGrievance = null,
   onCancel,
   onSubmit,
@@ -22,8 +20,9 @@ export default function SubmitGrievance({
   onViewTickets,
 }) {
   const isEditing = Boolean(editingGrievance);
-  const user = suppliedUser ?? {};
   const attachmentInputRef = useRef(null);
+  const categoryDropdownRef = useRef(null);
+  const categoryTriggerRef = useRef(null);
   const [formData, setFormData] = useState(() => ({
     category: editingGrievance?.category ?? '',
     title: editingGrievance?.title ?? '',
@@ -34,16 +33,22 @@ export default function SubmitGrievance({
   }));
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isReadingImage, setIsReadingImage] = useState(false);
+  const [isSubmitConfirmationOpen, setIsSubmitConfirmationOpen] = useState(false);
   const [submittedGrievance, setSubmittedGrievance] = useState(null);
   const [submitError, setSubmitError] = useState('');
   const [intakeOpen, setIntakeOpen] = useState(isEditing ? true : null);
   const [settingsError, setSettingsError] = useState('');
+  const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false);
+  const [activeCategoryIndex, setActiveCategoryIndex] = useState(() =>
+    Math.max(0, categories.indexOf(editingGrievance?.category ?? '')),
+  );
+  const [categoryError, setCategoryError] = useState('');
 
   useEffect(() => {
     if (isEditing) return undefined;
 
     let active = true;
-    apiRequest('/api/settings', token)
+    apiRequest('/api/settings')
       .then((result) => {
         if (typeof result.settings?.intakeOpen !== 'boolean') {
           throw new Error('The portal returned an invalid intake setting.');
@@ -60,7 +65,20 @@ export default function SubmitGrievance({
     return () => {
       active = false;
     };
-  }, [isEditing, token]);
+  }, [isEditing]);
+
+  useEffect(() => {
+    if (!categoryDropdownOpen) return undefined;
+
+    const handlePointerDown = (event) => {
+      if (!categoryDropdownRef.current?.contains(event.target)) {
+        setCategoryDropdownOpen(false);
+      }
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    return () => document.removeEventListener('pointerdown', handlePointerDown);
+  }, [categoryDropdownOpen]);
 
   const handleChange = (event) => {
     const { name, value, type, checked } = event.target;
@@ -124,11 +142,27 @@ export default function SubmitGrievance({
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+    if (!formData.category) {
+      setCategoryError('Select a category before submitting.');
+      categoryTriggerRef.current?.focus();
+      return;
+    }
+
     if (!isEditing && intakeOpen !== true) {
       setSubmitError(settingsError || 'Complaint submissions are temporarily paused. Please try again later.');
       return;
     }
 
+    if (!isEditing) {
+      setSubmitError('');
+      setIsSubmitConfirmationOpen(true);
+      return;
+    }
+
+    await saveGrievance();
+  };
+
+  const saveGrievance = async () => {
     setIsSubmitting(true);
     setSubmitError('');
 
@@ -151,8 +185,51 @@ export default function SubmitGrievance({
     if (savedGrievance && isEditing) {
       onUpdateSuccess?.(savedGrievance);
     } else if (savedGrievance) {
+      setIsSubmitConfirmationOpen(false);
       setSubmittedGrievance(savedGrievance);
     }
+  };
+
+  const handleCategoryKeyDown = (event) => {
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      const direction = event.key === 'ArrowDown' ? 1 : -1;
+      if (!categoryDropdownOpen) {
+        setActiveCategoryIndex(Math.max(0, categories.indexOf(formData.category)));
+        setCategoryDropdownOpen(true);
+      } else {
+        setActiveCategoryIndex((current) =>
+          (current + direction + categories.length) % categories.length,
+        );
+      }
+    } else if (event.key === 'Home' || event.key === 'End') {
+      event.preventDefault();
+      setActiveCategoryIndex(event.key === 'Home' ? 0 : categories.length - 1);
+      setCategoryDropdownOpen(true);
+    } else if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      if (!categoryDropdownOpen) {
+        setActiveCategoryIndex(Math.max(0, categories.indexOf(formData.category)));
+        setCategoryDropdownOpen(true);
+      } else {
+        setFormData((previous) => ({
+          ...previous,
+          category: categories[activeCategoryIndex],
+        }));
+        setCategoryError('');
+        setCategoryDropdownOpen(false);
+      }
+    } else if (event.key === 'Escape' && categoryDropdownOpen) {
+      event.preventDefault();
+      setCategoryDropdownOpen(false);
+    }
+  };
+
+  const selectCategory = (category, index) => {
+    setFormData((previous) => ({ ...previous, category }));
+    setActiveCategoryIndex(index);
+    setCategoryError('');
+    setCategoryDropdownOpen(false);
   };
 
   return (
@@ -174,9 +251,6 @@ export default function SubmitGrievance({
           <p>{isEditing
             ? `Update the details for ${editingGrievance.id}. Editing is available while it is under review.`
             : 'Share the details of your concern. Your submission will be handled confidentially.'}</p>
-          {user.universityEmail && (
-            <p className="submit-account">Submitting as {user.universityEmail}</p>
-          )}
           {settingsError && (
             <p className="submit-error" role="alert">
               Unable to check whether complaint submissions are open: {settingsError}
@@ -205,17 +279,65 @@ export default function SubmitGrievance({
           <div className="submit-form-grid">
             <label className="submit-field">
               <span>Category</span>
-              <select
-                name="category"
-                value={formData.category}
-                onChange={handleChange}
-                required
-              >
-                <option value="" disabled>Select a category</option>
-                {categories.map((category) => (
-                  <option key={category} value={category}>{category}</option>
-                ))}
-              </select>
+              <div className="submit-category-control" ref={categoryDropdownRef}>
+                <button
+                  type="button"
+                  className={`submit-category-trigger${categoryDropdownOpen ? ' is-open' : ''}`}
+                  ref={categoryTriggerRef}
+                  role="combobox"
+                  aria-label="Category"
+                  aria-haspopup="listbox"
+                  aria-expanded={categoryDropdownOpen}
+                  aria-controls={categoryDropdownOpen ? 'submit-category-options' : undefined}
+                  aria-activedescendant={categoryDropdownOpen ? `submit-category-option-${activeCategoryIndex}` : undefined}
+                  aria-required="true"
+                  aria-invalid={Boolean(categoryError)}
+                  aria-describedby={categoryError ? 'submit-category-error' : undefined}
+                  onClick={() => {
+                    if (!categoryDropdownOpen) {
+                      setActiveCategoryIndex(Math.max(0, categories.indexOf(formData.category)));
+                    }
+                    setCategoryDropdownOpen((open) => !open);
+                  }}
+                  onKeyDown={handleCategoryKeyDown}
+                >
+                  <span>{formData.category || 'Select a category'}</span>
+                  <svg
+                    className="submit-category-chevron"
+                    viewBox="0 0 20 20"
+                    aria-hidden="true"
+                  >
+                    <path d="m5 7.5 5 5 5-5" />
+                  </svg>
+                </button>
+                {categoryDropdownOpen && (
+                  <div
+                    className="submit-category-options"
+                    id="submit-category-options"
+                    role="listbox"
+                    aria-label="Categories"
+                  >
+                    {categories.map((category, index) => (
+                      <div
+                        key={category}
+                        className={`submit-category-option${activeCategoryIndex === index ? ' is-active' : ''}`}
+                        id={`submit-category-option-${index}`}
+                        role="option"
+                        aria-selected={formData.category === category}
+                        onMouseMove={() => setActiveCategoryIndex(index)}
+                        onClick={() => selectCategory(category, index)}
+                      >
+                        {category}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              {categoryError && (
+                <span className="submit-field-error" id="submit-category-error" role="alert">
+                  {categoryError}
+                </span>
+              )}
             </label>
 
             <label className="submit-field submit-field-full">
@@ -320,6 +442,17 @@ export default function SubmitGrievance({
           onClose={onCancel}
           onReturnDashboard={onCancel}
           onViewTickets={onViewTickets}
+        />
+      )}
+      {isSubmitConfirmationOpen && !isEditing && (
+        <ConfirmationModal
+          mode="submit-confirmation"
+          isSubmitting={isSubmitting}
+          error={submitError}
+          onClose={() => {
+            if (!isSubmitting) setIsSubmitConfirmationOpen(false);
+          }}
+          onConfirm={saveGrievance}
         />
       )}
     </main>

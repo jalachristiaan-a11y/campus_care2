@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import './Register.css';
+import { apiRequest } from './apiClient.js';
 
 export default function Register({ onBackToLogin }) {
   const [id, setId] = useState('');
-  const [fullName, setFullName] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -16,25 +18,23 @@ export default function Register({ onBackToLogin }) {
     setSuccess('');
     setLoading(true);
 
+    const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
+
     try {
-      const response = await fetch('/api/auth/register', {
+      await apiRequest('/api/auth/register', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           id,
+          first_name: firstName.trim(),
+          last_name: lastName.trim(),
           full_name: fullName,
           email,
           password,
         }),
       });
-
-      const data = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
-        throw new Error(data.message || 'Registration failed.');
-      }
 
       setSuccess('Account created successfully! Redirecting to login...');
       setTimeout(() => {
@@ -97,12 +97,24 @@ export default function Register({ onBackToLogin }) {
               </div>
 
               <div className="form-group" style={{ marginBottom: '12px' }}>
-                <label>Full Name</label>
+                <label>First Name</label>
                 <input
                   type="text"
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  placeholder="e.g. Juan Dela Cruz"
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  placeholder="e.g. Juan"
+                  required
+                  style={{ width: '100%', padding: '8px', marginTop: '4px' }}
+                />
+              </div>
+
+              <div className="form-group" style={{ marginBottom: '12px' }}>
+                <label>Last Name</label>
+                <input
+                  type="text"
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  placeholder="e.g. Dela Cruz"
                   required
                   style={{ width: '100%', padding: '8px', marginTop: '4px' }}
                 />

@@ -1,32 +1,19 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
 const db = require('../config/db.cjs');
+const {
+  authenticateSession,
+  clearSessionCookie,
+  createSession,
+  destroySession,
+  setSessionCookie,
+} = require('../middleware/sessionStore.cjs');
 
 const router = express.Router();
 const STUDENT_ID_PATTERN = /^\d{4}-?\d{4,5}$/;
 const WMSU_EMAIL_PATTERN = /^[^\s@]+@wmsu\.edu\.ph$/i;
 const PASSWORD_MIN_LENGTH = 8;
 const PASSWORD_MAX_BYTES = 72;
-
-const createToken = (user) => {
-  if (!process.env.JWT_SECRET) {
-    throw new Error('JWT_SECRET is not configured.');
-  }
-
-  return jwt.sign(
-    {
-      id: user.id,
-      role: user.role,
-      department_id: user.department_id,
-    },
-    process.env.JWT_SECRET,
-    {
-      algorithm: 'HS256',
-      expiresIn: process.env.JWT_EXPIRES_IN || '1h',
-    }
-  );
-};
 
 const formatUser = (user) => ({
   id: user.id,
@@ -41,11 +28,15 @@ const formatUser = (user) => ({
 // REGISTER ROUTE (POST /api/auth/register)
 // ==========================================
 router.post('/register', async (req, res) => {
-  const { id, full_name, email, password } = req.body || {};
+  const { id, first_name, last_name, full_name, email, password } = req.body || {};
   const studentId = typeof id === 'string'
     ? id.trim().replace(/^(\d{4})(\d{4,5})$/, '$1-$2')
     : '';
-  const fullName = typeof full_name === 'string' ? full_name.trim() : '';
+  const firstName = typeof first_name === 'string' ? first_name.trim() : '';
+  const lastName = typeof last_name === 'string' ? last_name.trim() : '';
+  const fullName = typeof full_name === 'string'
+    ? full_name.trim()
+    : [firstName, lastName].filter(Boolean).join(' ');
   const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
 
   if (
@@ -58,7 +49,7 @@ router.post('/register', async (req, res) => {
     Buffer.byteLength(password, 'utf8') > PASSWORD_MAX_BYTES
   ) {
     return res.status(400).json({
-      message: 'Enter a valid student ID, full name, WMSU email, and a password between 8 and 72 bytes.',
+      message: 'Enter a valid student ID, first name, last name, WMSU email, and a password between 8 and 72 bytes.',
     });
   }
 
@@ -93,7 +84,6 @@ router.post('/register', async (req, res) => {
     return res.status(201).json({
       message: 'Registration successful.',
       user: formatUser(newUser),
-      token: createToken(newUser)
     });
 
   } catch (error) {
@@ -139,14 +129,32 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ message: 'Invalid email or password.' });
     }
 
+    const sessionId = await createSession(user.id);
+    setSessionCookie(res, sessionId);
+
     return res.json({
       message: 'Login successful.',
       user: formatUser(user),
-      token: createToken(user)
     });
   } catch (error) {
     console.error('Login Error:', error);
     return res.status(500).json({ message: 'Server error while logging in.' });
+  }
+});
+
+router.get('/session', authenticateSession, (req, res) => (
+  res.json({ user: formatUser(req.sessionUser) })
+));
+
+router.post('/logout', async (req, res) => {
+  try {
+    await destroySession(req);
+    clearSessionCookie(res);
+    return res.status(204).end();
+  } catch (error) {
+    console.error('Logout Error:', error);
+    clearSessionCookie(res);
+    return res.status(500).json({ message: 'Unable to end your session.' });
   }
 });
 

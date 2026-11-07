@@ -88,7 +88,7 @@ const resolveNoticeRecipient = (recipientValue) => {
 
   return { recipientEmail: email, recipientStudentId: studentId, recipientName };
 };
-export default function GrievanceQueue({ user = {}, onLogout, token }) {
+export default function GrievanceQueue({ user = {}, onLogout }) {
   const [logoutConfirmationOpen, setLogoutConfirmationOpen] = useState(false);
   const [activeNav, setActiveNav] = useState('Grievance Queue');
   const [activeTab, setActiveTab] = useState('All Cases');
@@ -149,7 +149,7 @@ export default function GrievanceQueue({ user = {}, onLogout, token }) {
     let active = true;
     const loadSettings = async () => {
       try {
-        const result = await apiRequest('/api/settings', token);
+        const result = await apiRequest('/api/settings');
         if (!active) return;
         setIntakeOpen(result.settings.intakeOpen);
         setSlaHours(String(result.settings.slaHours));
@@ -169,13 +169,13 @@ export default function GrievanceQueue({ user = {}, onLogout, token }) {
     return () => {
       active = false;
     };
-  }, [token, settingsLoadAttempt]);
+  }, [settingsLoadAttempt]);
 
   useEffect(() => {
     let active = true;
     const loadCases = async () => {
       try {
-        const result = await apiRequest('/api/complaints', token);
+        const result = await apiRequest('/api/complaints');
         if (active) {
           setCases(result.complaints.map((complaint) => (
             mapComplaintToCase(complaint, { slaHours, urgentSlaHours })
@@ -198,13 +198,13 @@ export default function GrievanceQueue({ user = {}, onLogout, token }) {
       active = false;
       window.clearInterval(intervalId);
     };
-  }, [token, slaHours, urgentSlaHours]);
+  }, [slaHours, urgentSlaHours]);
 
   useEffect(() => {
     let active = true;
     const loadNotices = async () => {
       try {
-        const result = await apiRequest('/api/notices', token);
+        const result = await apiRequest('/api/notices');
         if (active) setNotices(result.notices);
       } catch (error) {
         if (active) showNotification(`Unable to load notices: ${error.message}`, 'error');
@@ -217,7 +217,7 @@ export default function GrievanceQueue({ user = {}, onLogout, token }) {
       active = false;
       window.clearInterval(intervalId);
     };
-  }, [token]);
+  }, []);
 
   const adminNotifications = useMemo(
     () => cases
@@ -298,7 +298,6 @@ export default function GrievanceQueue({ user = {}, onLogout, token }) {
     let active = true;
     apiRequest(
       `/api/complaints/${encodeURIComponent(selectedComplaintId)}/activity`,
-      token,
     )
       .then((result) => {
         if (active) {
@@ -322,7 +321,7 @@ export default function GrievanceQueue({ user = {}, onLogout, token }) {
     return () => {
       active = false;
     };
-  }, [selectedComplaintId, token]);
+  }, [selectedComplaintId]);
 
   const openNotificationCase = (notification) => {
     setReadNotificationIds((previousIds) => new Set(previousIds).add(notification.id));
@@ -359,7 +358,6 @@ export default function GrievanceQueue({ user = {}, onLogout, token }) {
     try {
       const result = await apiRequest(
         `/api/complaints/${encodeURIComponent(caseItem.grievanceId)}/status`,
-        token,
         { method: 'PATCH', body: JSON.stringify({ status, resolutionNote: note }) },
       );
       updatedComplaint = mapComplaintToCase(result.complaint, { slaHours, urgentSlaHours });
@@ -383,7 +381,6 @@ export default function GrievanceQueue({ user = {}, onLogout, token }) {
     try {
       const activityResult = await apiRequest(
         `/api/complaints/${encodeURIComponent(caseItem.grievanceId)}/activity`,
-        token,
       );
       setComplaintActivity({
         complaintId: caseItem.grievanceId,
@@ -413,7 +410,6 @@ export default function GrievanceQueue({ user = {}, onLogout, token }) {
     try {
       const result = await apiRequest(
         `/api/complaints/${encodeURIComponent(selectedCase.grievanceId)}/responses`,
-        token,
         {
           method: 'POST',
           body: JSON.stringify({ message: responseMessage }),
@@ -463,7 +459,7 @@ export default function GrievanceQueue({ user = {}, onLogout, token }) {
     setSettingsSaving(true);
     setSettingsSaveError('');
     try {
-      const result = await apiRequest('/api/settings', token, {
+      const result = await apiRequest('/api/settings', {
         method: 'PUT',
         body: JSON.stringify({
           intakeOpen,
@@ -495,7 +491,6 @@ export default function GrievanceQueue({ user = {}, onLogout, token }) {
     try {
       const result = await apiRequest(
         `/api/complaints/${encodeURIComponent(caseItem.grievanceId)}/department`,
-        token,
         { method: 'PATCH', body: JSON.stringify({ department: nextDepartment }) },
       );
       const updatedComplaint = mapComplaintToCase(result.complaint, { slaHours, urgentSlaHours });
@@ -534,7 +529,7 @@ export default function GrievanceQueue({ user = {}, onLogout, token }) {
 
     try {
       const recipient = resolveNoticeRecipient(noticeForm.recipient);
-      const result = await apiRequest('/api/notices', token, {
+      const result = await apiRequest('/api/notices', {
         method: 'POST',
         body: JSON.stringify({
           ...recipient,

@@ -2,12 +2,16 @@
 
 ## Run locally
 
-1. Configure the PostgreSQL connection and `JWT_SECRET` in `.env`.
+1. Configure the PostgreSQL connection in `.env`.
 2. Run `npm install` once to install project dependencies.
 3. Run `npm run db:init` to create or update the database tables.
 4. Run `npm run dev` in PowerShell and open the local URL printed by Vite.
 
 Run `npm run db:init` again after pulling changes that update the database schema. The command preserves existing records.
+
+## Login sessions
+
+Successful logins use an opaque, server-managed session stored in PostgreSQL. The browser receives only an HttpOnly, SameSite=Lax session cookie; cookies are Secure automatically when `NODE_ENV=production`. Sessions expire after eight hours and are removed from the database when users log out. Unsafe API requests must include the application's CSRF-protection header, which the shared API client adds automatically.
 
 ## Complaint workflow
 

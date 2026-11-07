@@ -1,7 +1,7 @@
 const crypto = require('node:crypto');
 const express = require('express');
 const db = require('../config/db.cjs');
-const { authenticateToken, authorizeRoles } = require('../middleware/authMiddleware.cjs');
+const { authenticateSession, authorizeRoles } = require('../middleware/authMiddleware.cjs');
 
 const router = express.Router();
 const allowedCategories = new Set([
@@ -56,7 +56,7 @@ const formatActivity = (row) => ({
   createdAt: row.created_at.toISOString(),
 });
 
-router.use(authenticateToken);
+router.use(authenticateSession);
 
 router.get('/', async (req, res) => {
   if (!['student', 'admin'].includes(req.user.role)) {

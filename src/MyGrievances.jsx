@@ -20,7 +20,7 @@ const formatDate = (dateValue) => {
   }).format(date);
 };
 
-function TicketTracking({ grievance, onBack, token, updateConfirmation }) {
+function TicketTracking({ grievance, onBack, updateConfirmation }) {
   const [activityState, setActivityState] = useState({ complaintId: '', activity: [], error: '' });
   const isUnderReview = grievance.statusClass === 'review';
   const isInProgress = grievance.statusClass === 'progress';
@@ -64,7 +64,7 @@ function TicketTracking({ grievance, onBack, token, updateConfirmation }) {
 
   useEffect(() => {
     let active = true;
-    apiRequest(`/api/complaints/${encodeURIComponent(grievance.id)}/activity`, token)
+    apiRequest(`/api/complaints/${encodeURIComponent(grievance.id)}/activity`)
       .then((result) => {
         if (active) {
           setActivityState({
@@ -87,7 +87,7 @@ function TicketTracking({ grievance, onBack, token, updateConfirmation }) {
     return () => {
       active = false;
     };
-  }, [grievance.id, token]);
+  }, [grievance.id]);
 
   return (
     <section className="ticket-tracking">
@@ -223,7 +223,6 @@ function TicketTracking({ grievance, onBack, token, updateConfirmation }) {
 
 export default function MyGrievances({
   grievances,
-  token,
   onNewGrievance,
   onUpdateGrievance,
   onWithdrawGrievance,
@@ -298,7 +297,6 @@ export default function MyGrievances({
     return (
       <TicketTracking
         grievance={trackedGrievance}
-        token={token}
         updateConfirmation={updateConfirmation}
         onBack={() => {
           setTrackedGrievance(null);

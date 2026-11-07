@@ -12,23 +12,7 @@ import SubmitGrievance from './SubmitGrievance.jsx';
 import GrievanceQueue from './GrievanceQueue.jsx';
 import { apiRequest } from './apiClient.js';
 
-const SESSION_KEY = 'campuscare.session';
 const protectedViews = new Set(['dashboard', 'admin', 'submit-grievance']);
-
-const getStoredSession = () => {
-  try {
-    const storedSession = window.sessionStorage.getItem(SESSION_KEY);
-    if (!storedSession) return null;
-
-    const session = JSON.parse(storedSession);
-    return typeof session?.token === 'string' && session.user
-      ? session
-      : null;
-  } catch (error) {
-    console.error('Unable to restore CampusCare session:', error);
-    return null;
-  }
-};
 
 const mapApiUser = (user) => ({
   universityEmail: user.email,
@@ -80,30 +64,55 @@ export default function App() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [notification, setNotification] = useState(null);
-  const [authSession, setAuthSession] = useState(getStoredSession);
-  const [currentView, setCurrentView] = useState(() => {
-    const initialView = getInitialView();
-    return protectedViews.has(initialView) && !getStoredSession()
-      ? 'login'
-      : initialView;
-  });
-  const [dashboardUser, setDashboardUser] = useState(() => getStoredSession()?.user ?? null);
+  const [authSession, setAuthSession] = useState(null);
+  const [currentView, setCurrentView] = useState(getInitialView);
+  const [dashboardUser, setDashboardUser] = useState(null);
   const [dashboardTab, setDashboardTab] = useState('Dashboard');
   const [savedGrievanceState, setSavedGrievanceState] = useState({ grievances: [], error: '' });
 
   useEffect(() => {
+    try {
+      window.sessionStorage.removeItem('campuscare.session');
+    } catch (error) {
+      console.error('Unable to clear the previous browser session data:', error);
+    }
+
+    let active = true;
+    apiRequest('/api/auth/session')
+      .then((result) => {
+        if (!active) return;
+        const session = { user: mapApiUser(result.user) };
+        setAuthSession(session);
+        setDashboardUser(session.user);
+      })
+      .catch((error) => {
+        if (active && error.status !== 401) {
+          setNotification({
+            type: 'error',
+            message: error instanceof Error ? error.message : 'Unable to verify your login session.',
+          });
+        }
+      })
+      .finally(() => {
+        if (active) setIsAuthLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (isAuthLoading) return undefined;
+
     const syncViewFromHash = () => {
       const requestedView = getInitialView();
-      const activeSession = authSession?.token ? authSession : getStoredSession();
-      if (protectedViews.has(requestedView) && !activeSession?.token) {
+      if (protectedViews.has(requestedView) && !authSession) {
         window.location.hash = '#login';
         setCurrentView('login');
         return;
-      }
-      if (activeSession && !authSession) {
-        setAuthSession(activeSession);
-        setDashboardUser(activeSession.user);
       }
       setCurrentView(requestedView);
     };
@@ -112,15 +121,15 @@ export default function App() {
     window.addEventListener('hashchange', syncViewFromHash);
 
     return () => window.removeEventListener('hashchange', syncViewFromHash);
-  }, [authSession]);
+  }, [authSession, isAuthLoading]);
 
   useEffect(() => {
-    if (!authSession?.token) return undefined;
+    if (!authSession) return undefined;
 
     let active = true;
     const refreshComplaints = async () => {
       try {
-        const result = await apiRequest('/api/complaints', authSession.token);
+        const result = await apiRequest('/api/complaints');
         if (active) {
           setSavedGrievanceState({ grievances: result.complaints, error: '' });
         }
@@ -147,14 +156,23 @@ export default function App() {
     window.location.hash = '#register';
   };
 
-  const handleGoToLogin = () => {
-    window.sessionStorage.removeItem(SESSION_KEY);
-    setAuthSession(null);
-    setDashboardUser(null);
-    setDashboardTab('Dashboard');
-    setSavedGrievanceState({ grievances: [], error: '' });
-    setCurrentView('login');
-    window.location.hash = '#login';
+  const handleGoToLogin = async () => {
+    try {
+      await apiRequest('/api/auth/logout', { method: 'POST' });
+      setNotification(null);
+    } catch (error) {
+      setNotification({
+        type: 'error',
+        message: error instanceof Error ? error.message : 'Unable to end your session.',
+      });
+    } finally {
+      setAuthSession(null);
+      setDashboardUser(null);
+      setDashboardTab('Dashboard');
+      setSavedGrievanceState({ grievances: [], error: '' });
+      setCurrentView('login');
+      window.location.hash = '#login';
+    }
   };
 
   const handleLandingLogin = () => {
@@ -179,11 +197,11 @@ export default function App() {
   };
 
   const handleSaveGrievance = async (formData) => {
-    if (!authSession?.token) {
+    if (!authSession) {
       throw new Error('Please log in again before submitting a complaint.');
     }
 
-    const result = await apiRequest('/api/complaints', authSession.token, {
+    const result = await apiRequest('/api/complaints', {
       method: 'POST',
       body: JSON.stringify(formData),
     });
@@ -199,13 +217,12 @@ export default function App() {
   };
 
   const handleUpdateGrievance = async (grievanceId, formData) => {
-    if (!authSession?.token) {
+    if (!authSession) {
       throw new Error('Please log in again before editing a complaint.');
     }
 
     const result = await apiRequest(
       `/api/complaints/${encodeURIComponent(grievanceId)}`,
-      authSession.token,
       {
         method: 'PATCH',
         body: JSON.stringify(formData),
@@ -222,13 +239,12 @@ export default function App() {
   };
 
   const handleWithdrawGrievance = async (grievanceId) => {
-    if (!authSession?.token) {
+    if (!authSession) {
       throw new Error('Please log in again before withdrawing a complaint.');
     }
 
     const result = await apiRequest(
       `/api/complaints/${encodeURIComponent(grievanceId)}`,
-      authSession.token,
       { method: 'DELETE' },
     );
     const withdrawnGrievance = result.complaint;
@@ -253,20 +269,14 @@ export default function App() {
     setNotification(null);
 
     try {
-      const response = await fetch('/api/auth/login', {
+      const result = await apiRequest('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ identifier, password }),
       });
-      const result = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
-        throw new Error(result.message || 'Unable to log in. Please try again.');
-      }
 
       const user = result.user;
-      const session = { token: result.token, user: mapApiUser(user) };
-      window.sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
+      const session = { user: mapApiUser(user) };
       setAuthSession(session);
       setDashboardUser(session.user);
       const destination = user.role === 'admin' ? 'admin' : 'dashboard';
@@ -282,11 +292,18 @@ export default function App() {
     }
   };
 
+  if (isAuthLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 text-sm text-slate-600" role="status">
+        Checking your session…
+      </div>
+    );
+  }
+
   if (currentView === 'admin') {
     return (
       <GrievanceQueue
         user={dashboardUser}
-        token={authSession?.token}
         onLogout={handleGoToLogin}
       />
     );
@@ -312,7 +329,6 @@ export default function App() {
     return (
       <Dashboard
         user={dashboardUser}
-        token={authSession?.token}
         grievances={savedGrievanceState.grievances}
         grievanceError={savedGrievanceState.error}
         onFileGrievance={handleOpenSubmitGrievance}
@@ -328,7 +344,6 @@ export default function App() {
     return (
       <SubmitGrievance
         user={dashboardUser}
-        token={authSession?.token}
         onCancel={handleGrievanceSubmitted}
         onSubmit={handleSaveGrievance}
         onViewTickets={handleOpenMyGrievances}

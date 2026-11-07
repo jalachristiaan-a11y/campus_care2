@@ -23,7 +23,6 @@ const Dashboard = ({
   onUpdateGrievance,
   onWithdrawGrievance,
   onLogout,
-  token,
   initialTab = 'Dashboard',
 }) => {
   const user = suppliedUser ?? {};
@@ -138,11 +137,10 @@ const Dashboard = ({
   };
 
   useEffect(() => {
-    if (!token) return undefined;
     let active = true;
     const refreshMessages = async () => {
       try {
-        const result = await apiRequest('/api/notices', token);
+        const result = await apiRequest('/api/notices');
         if (active) {
           setStudentMessages(result.notices);
           setNoticeError('');
@@ -160,7 +158,7 @@ const Dashboard = ({
       active = false;
       window.clearInterval(intervalId);
     };
-  }, [token]);
+  }, []);
 
   return (
     <div className="dashboard-container">
@@ -414,7 +412,6 @@ const Dashboard = ({
         ) : activeTab === 'My Grievances' ? (
           <MyGrievances
             grievances={grievances}
-            token={token}
             onNewGrievance={onFileGrievance}
             onUpdateGrievance={onUpdateGrievance}
             onWithdrawGrievance={onWithdrawGrievance}
