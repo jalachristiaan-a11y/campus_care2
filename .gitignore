@@ -6,3 +6,6 @@ dist-ssr/
 !.env.example
 *.local
 *.log
+node_modules/
+.env
+dist/
