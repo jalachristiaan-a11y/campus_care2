@@ -1529,23 +1529,16 @@
   --campuscare-crimson-dark: #66001a;
   --campuscare-crimson-soft: #fff1f3;
   min-height: 100vh;
-  padding: clamp(0.75rem, 2.5vw, 2rem);
-  background:
-    radial-gradient(ellipse at 12% 10%, rgba(128, 0, 32, 0.1), transparent 36%),
-    #fff5f6;
+  background: #fff;
   color: #242033;
 }
 
 .student-portal-shell {
   display: flex;
-  width: min(100%, 1440px);
-  min-height: calc(100vh - clamp(1.5rem, 5vw, 4rem));
-  margin: 0 auto;
+  width: 100%;
+  min-height: 100vh;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.9);
-  border-radius: 1.65rem;
   background: #fff;
-  box-shadow: 0 24px 70px rgba(80, 0, 20, 0.14);
 }
 
 .student-sidebar {
@@ -2209,18 +2202,6 @@
 }
 
 @media (max-width: 600px) {
-  .dashboard-container {
-    padding: 0;
-    background: #fff;
-  }
-
-  .student-portal-shell {
-    min-height: 100vh;
-    border: 0;
-    border-radius: 0;
-    box-shadow: none;
-  }
-
   .student-sidebar {
     gap: 0.65rem;
     margin: 0.65rem;

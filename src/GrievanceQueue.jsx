@@ -706,9 +706,9 @@ export default function GrievanceQueue({ user = {}, onLogout }) {
   ];
 
   return (
-    <div className="flex h-screen bg-slate-100 text-slate-700 font-sans p-2 sm:p-4">
+    <div className="flex h-screen bg-white text-slate-700 font-sans">
       {/* Container Card */}
-      <div className="flex flex-1 bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-100">
+      <div className="flex min-w-0 flex-1 overflow-hidden bg-white">
         
         {/* Sidebar */}
         <aside className={`admin-sidebar w-64 m-4 mr-0 rounded-2xl bg-gradient-to-b from-[#a00028] via-[#800020] to-[#66001a] p-5 flex flex-col justify-between hidden md:flex shrink-0 text-white${adminMenuOpen ? ' mobile-open' : ''}`}>
