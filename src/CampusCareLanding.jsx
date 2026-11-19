@@ -167,7 +167,7 @@ export default function CampusCareLanding({ onLogin }) {
               A simple and secure platform for students to submit and track their complaints and concerns. Every voice matters, and every concern deserves action.
             </p>
             <div className="mb-10 flex flex-wrap items-center justify-center gap-4">
-              <button type="button" onClick={onLogin} className="flex items-center gap-2 rounded-full bg-[#800020] px-6 py-3 text-sm font-medium text-white shadow-md transition-all hover:bg-[#660019] hover:shadow-lg">
+              <button type="button" onClick={onLogin} className="flex items-center gap-2 rounded-full bg-[#800020] px-6 py-3 text-sm font-medium text-white shadow-md transition-[transform,background-color,box-shadow] hover:bg-[#660019] hover:shadow-lg">
                 Submit a Concern <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
               </button>
               <button type="button" onClick={() => scrollToSection('about')} className="rounded-full border border-slate-200 bg-white px-6 py-3 text-sm font-medium text-slate-700 shadow-sm transition-colors hover:bg-slate-50">
