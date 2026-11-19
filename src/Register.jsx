@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Eye, EyeOff } from 'lucide-react';
 import './Register.css';
 import { apiRequest } from './apiClient.js';
 
@@ -8,6 +9,7 @@ export default function Register({ onBackToLogin }) {
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
@@ -55,7 +57,7 @@ export default function Register({ onBackToLogin }) {
   return (
     <div className="register-page">
       <div className="register-wrapper">
-        <div className="register-card">
+        <div className="register-card" data-scroll-reveal>
           <div className="register-hero">
             <div className="hero-bg-overlay" />
             <div className="hero-text-content">
@@ -80,8 +82,8 @@ export default function Register({ onBackToLogin }) {
               </p>
             </div>
 
-            {error && <div className="error-message" style={{ color: 'red', marginBottom: '10px' }}>{error}</div>}
-            {success && <div className="success-message" style={{ color: 'green', marginBottom: '10px' }}>{success}</div>}
+            {error && <div className="error-message" role="alert">{error}</div>}
+            {success && <div className="success-message" role="status">{success}</div>}
 
             <form onSubmit={handleSubmit} className="register-form">
               <div className="form-group" style={{ marginBottom: '12px' }}>
@@ -133,16 +135,33 @@ export default function Register({ onBackToLogin }) {
               </div>
 
               <div className="form-group" style={{ marginBottom: '16px' }}>
-                <label>Password</label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="********"
-                  required
-                  minLength={8}
-                  style={{ width: '100%', padding: '8px', marginTop: '4px' }}
-                />
+                <div className="form-password-label">
+                  <label htmlFor="register-password">Password</label>
+                  <button
+                    type="button"
+                    className="form-password-toggle"
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    aria-controls="register-password"
+                    aria-pressed={showPassword}
+                    onClick={() => setShowPassword((isVisible) => !isVisible)}
+                  >
+                    {showPassword ? <EyeOff size={15} aria-hidden="true" /> : <Eye size={15} aria-hidden="true" />}
+                    {showPassword ? 'Hide' : 'Show'}
+                  </button>
+                </div>
+                <div className="form-password-control">
+                  <input
+                    id="register-password"
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="********"
+                    autoComplete="new-password"
+                    required
+                    minLength={8}
+                    style={{ width: '100%', padding: '8px', marginTop: '4px' }}
+                  />
+                </div>
               </div>
 
               <button

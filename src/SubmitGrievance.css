@@ -267,9 +267,61 @@
   font-weight: 500;
 }
 
-.submit-field .submit-image-input {
-  padding: 0.55rem;
+.submit-file-picker {
+  position: relative;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  overflow: hidden;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
   background: #f8fafc;
+  color: #475569;
+  font-size: 0.85rem;
+  font-weight: 400;
+  cursor: pointer;
+  transition: border-color 220ms ease, box-shadow 220ms ease, background-color 220ms ease;
+}
+
+.submit-file-picker:hover {
+  border-color: #94a3b8;
+  background: #ffffff;
+}
+
+.submit-file-picker:focus-within {
+  border-color: #800020;
+  outline: 2px solid rgba(128, 0, 32, 0.18);
+  outline-offset: 2px;
+}
+
+.submit-file-picker-button {
+  flex: 0 0 auto;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 7px;
+  background: #ffffff;
+  color: #334155;
+  font-weight: 600;
+}
+
+.submit-file-picker-status {
+  min-width: 0;
+  overflow: hidden;
+  color: #64748b;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.submit-field .submit-image-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .submit-image-preview {

@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
+import { ArrowLeft, FileText, Send } from 'lucide-react';
 import './MyGrievances.css';
 import SubmitGrievance from './SubmitGrievance.jsx';
 import { apiRequest } from './apiClient.js';
+import useScrollReveal from './useScrollReveal.js';
 
 const formatDate = (dateValue) => {
   if (!dateValue) {
@@ -20,203 +22,221 @@ const formatDate = (dateValue) => {
   }).format(date);
 };
 
-function TicketTracking({ grievance, onBack, updateConfirmation }) {
-  const [activityState, setActivityState] = useState({ complaintId: '', activity: [], error: '' });
-  const isUnderReview = grievance.statusClass === 'review';
-  const isInProgress = grievance.statusClass === 'progress';
-  const isResolved = grievance.statusClass === 'closed';
-  const isWithdrawn = grievance.statusClass === 'withdrawn';
-  const steps = [
-    {
-      title: 'Ticket submitted',
-      description: 'Your grievance was received by CampusCare.',
-      complete: true,
-    },
-    {
-      title: 'Under review',
-      description: isUnderReview
-        ? 'Your grievance is being reviewed.'
-        : 'The review stage has been completed.',
-      complete: !isUnderReview,
-      current: isUnderReview,
-    },
-    {
-      title: 'In progress',
-      description: isInProgress
-        ? 'The assigned department is working on your grievance.'
-        : isResolved
-          ? 'The department completed its work on your grievance.'
-          : 'This step will begin after review.',
-      complete: isResolved,
-      current: isInProgress,
-      upcoming: !isInProgress && !isResolved,
-    },
-    {
-      title: 'Resolved',
-      description: isResolved
-        ? grievance.status
-        : 'A resolution has not been recorded yet.',
-      complete: isResolved,
-      current: isResolved,
-      upcoming: !isResolved,
-    },
-  ];
+const formatDateTime = (dateValue) => {
+  if (!dateValue || Number.isNaN(new Date(dateValue).getTime())) return 'Date unavailable';
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(new Date(dateValue));
+};
 
-  useEffect(() => {
-    let active = true;
-    apiRequest(`/api/complaints/${encodeURIComponent(grievance.id)}/activity`)
-      .then((result) => {
-        if (active) {
-          setActivityState({
-            complaintId: grievance.id,
-            activity: result.activity,
-            error: '',
-          });
-        }
-      })
-      .catch((error) => {
-        if (active) {
-          setActivityState({
-            complaintId: grievance.id,
-            activity: [],
-            error: error instanceof Error ? error.message : 'Unable to load case responses.',
-          });
-        }
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [grievance.id]);
+function TicketTracking({
+  grievance,
+  activity,
+  activityLoading,
+  activityError,
+  updateConfirmation,
+  onBack,
+  onSubmitInformation,
+  submittingInformation,
+  informationError,
+}) {
+  const [additionalInformation, setAdditionalInformation] = useState('');
+  const terminalStep = {
+    'Need More Information': 'Need More Info',
+    Rejected: 'Rejected',
+    Withdrawn: 'Withdrawn',
+    Closed: 'Closed',
+  }[grievance.status] || 'Resolved';
+  const statusSteps = ['Submitted', 'Under Review', 'In Progress', terminalStep];
+  const progressIndex = {
+    'Under Review': 1,
+    'Need More Information': 1,
+    'In Progress': 2,
+    Resolved: 3,
+    Closed: 3,
+    Rejected: 3,
+    Withdrawn: 3,
+  }[grievance.status] ?? 0;
+  const isTerminal = ['Resolved', 'Rejected', 'Withdrawn', 'Closed'].includes(grievance.status);
 
   return (
-    <section className="ticket-tracking">
-      <button type="button" className="ticket-tracking-back" onClick={onBack}>
-        &larr; Back to My Grievances
-      </button>
+    <section className="complaint-detail-view" data-scroll-reveal>
+      <div className="complaint-window">
+        <header className="complaint-topbar">
+          <div className="complaint-brand-block">
+            <span className="complaint-brand">CAMPUSCARE<br />STUDENT PORTAL</span>
+          </div>
+        </header>
 
-      <header className="ticket-tracking-heading">
-        <div>
-          <span className="my-grievances-eyebrow">CASE TRANSPARENCY HUB</span>
-          <h1>Ticket Tracking</h1>
-          <p>Follow the latest status of your grievance.</p>
+        <div className="complaint-body-shell">
+          <div className="complaint-page-header">
+            <button type="button" className="breadcrumb-back" onClick={onBack}>
+              <ArrowLeft size={14} aria-hidden="true" />
+              <span>My Grievances</span>
+            </button>
+            <span className="breadcrumb-divider">&gt;</span>
+            <span className="breadcrumb-current">{grievance.id}</span>
+          </div>
+
+          <div className="complaint-panel">
+            <div className="complaint-panel-header">
+              <div>
+                <span className="complaint-panel-kicker">Complaint · {grievance.id}</span>
+                <h1>{grievance.title || 'Untitled complaint'}</h1>
+              </div>
+              <div className="complaint-meta-row">
+                <span className="complaint-date">Submitted {formatDateTime(grievance.submittedAt)}</span>
+              </div>
+            </div>
+
+            <div className="complaint-status-block">
+              <div className="complaint-status-header">
+                <span className={`status-tag ${grievance.statusClass || ''}`}>{grievance.status}</span>
+                <span className="status-last-updated">{grievance.updated || 'Status update pending'}</span>
+              </div>
+
+              <div className="status-track" aria-label={`Complaint progress: ${grievance.status}`}>
+                {statusSteps.map((step, index) => (
+                  <span
+                    key={step}
+                    className={`status-track-segment${index <= progressIndex ? ' active' : ''}`}
+                  />
+                ))}
+              </div>
+
+              <div className="status-labels" aria-label="Status labels">
+                {statusSteps.map((step, index) => (
+                  <span
+                    className={`status-pill${index < progressIndex ? ' ok' : index === progressIndex ? ' current' : ''}`}
+                    key={step}
+                  >
+                    {step}
+                  </span>
+                ))}
+              </div>
+              {grievance.status === 'Need More Information' && (
+                <p className="tracking-info-request">The administrator requested additional information. Reply below to continue the review.</p>
+              )}
+              {grievance.status === 'Rejected' && (
+                <p className="tracking-terminal-message">This complaint was rejected. Review the history below for the administrator’s explanation.</p>
+              )}
+              {grievance.status === 'Withdrawn' && (
+                <p className="tracking-terminal-message">You withdrew this complaint; it is no longer being processed.</p>
+              )}
+            </div>
+
+            <div className="complaint-grid">
+              <div className="complaint-fields">
+                {[
+                  ['Complaint ID', grievance.id],
+                  ['Category', grievance.category || 'Not specified'],
+                  ['Email', grievance.submittedBy || 'Not available'],
+                  ['Assigned Department', grievance.department || 'Awaiting assignment'],
+                  ['Campus Location', grievance.location || 'Not provided'],
+                  ['Submission Date', formatDateTime(grievance.submittedAt)],
+                ].map(([label, value]) => (
+                  <div className="field-row" key={label}>
+                    <span className="field-label">{label}</span>
+                    <span className="field-value">{value}</span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="complaint-story-block">
+                <div className="complaint-story-header">
+                  <span className="story-author">{grievance.submittedByName || 'Student'}</span>
+                  <span className="story-badge">{grievance.status}</span>
+                </div>
+                <div className="complaint-story-title">Complaint description</div>
+                <div className="complaint-story-body">
+                  <p>{grievance.description || 'No description was provided.'}</p>
+                </div>
+
+                <div className="attachment-block">
+                  <div className="attachment-header">
+                    <span>Supporting evidence</span>
+                    <span>{grievance.attachment?.name ? '1 attachment' : 'No attachments'}</span>
+                  </div>
+                  <div className="attachment-list">
+                    {grievance.attachment?.data ? (
+                      <a
+                        className="attachment-card"
+                        href={grievance.attachment.data}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        <span className="attachment-thumb"><FileText size={20} aria-hidden="true" /></span>
+                        <span>{grievance.attachment.name || 'Open attachment'}</span>
+                      </a>
+                    ) : (
+                      <p className="tracking-empty">No supporting evidence was submitted.</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <section className="tracking-history" aria-labelledby="tracking-history-title">
+              <h2 id="tracking-history-title">Status history &amp; administrator remarks</h2>
+              {activityLoading ? (
+                <p className="tracking-empty" role="status">Loading complaint history…</p>
+              ) : activityError ? (
+                <p className="tracking-error" role="alert">{activityError}</p>
+              ) : activity.length ? (
+                <ol className="tracking-activity-list">
+                  {activity.map((item) => (
+                    <li key={item.id}>
+                      <div>
+                        <strong>{item.type.replaceAll('_', ' ')}</strong>
+                        <span>{item.actor}</span>
+                      </div>
+                      <p>{item.message}</p>
+                      <time dateTime={item.createdAt}>{formatDateTime(item.createdAt)}</time>
+                    </li>
+                  ))}
+                </ol>
+              ) : (
+                <p className="tracking-empty">No activity has been recorded yet.</p>
+              )}
+
+              {grievance.status === 'Need More Information' && !isTerminal && (
+                <form
+                  className="tracking-additional-info"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    onSubmitInformation(additionalInformation).then((submitted) => {
+                      if (submitted) setAdditionalInformation('');
+                    });
+                  }}
+                >
+                  <label htmlFor="student-additional-information">Your additional information</label>
+                  <textarea
+                    id="student-additional-information"
+                    value={additionalInformation}
+                    onChange={(event) => setAdditionalInformation(event.target.value)}
+                    maxLength={3000}
+                    rows={4}
+                    required
+                    placeholder="Provide the information requested by the administrator…"
+                  />
+                  {informationError && <p className="tracking-error" role="alert">{informationError}</p>}
+                  <button type="submit" disabled={submittingInformation || !additionalInformation.trim()}>
+                    <Send size={15} aria-hidden="true" />
+                    {submittingInformation ? 'Sending…' : 'Send information'}
+                  </button>
+                </form>
+              )}
+            </section>
+          </div>
         </div>
-        <span className={`ticket-tracking-current-status ${grievance.statusClass}`}>
-          {grievance.status}
-        </span>
-      </header>
+      </div>
 
       {updateConfirmation && (
         <p className="ticket-tracking-update-success" role="status">
-          Grievance updated successfully.
+          Your complaint information was updated successfully.
         </p>
       )}
-
-      <div className="ticket-tracking-grid">
-        <article className="ticket-tracking-panel ticket-tracking-summary">
-          <span className="ticket-tracking-label">TICKET IDENTIFIER</span>
-          <h2>{grievance.id}</h2>
-          <h3>{grievance.title}</h3>
-          <p>{grievance.description}</p>
-          <dl>
-            <div>
-              <dt>Category</dt>
-              <dd>{grievance.category}</dd>
-            </div>
-            <div>
-              <dt>Assigned department</dt>
-              <dd>{grievance.department}</dd>
-            </div>
-            <div>
-              <dt>Date submitted</dt>
-              <dd>{formatDate(grievance.submittedAt)}</dd>
-            </div>
-            {grievance.location && (
-              <div>
-                <dt>Location</dt>
-                <dd>{grievance.location}</dd>
-              </div>
-            )}
-          </dl>
-          {grievance.attachment && (
-            <div className="ticket-tracking-attachment">
-              <h3>Attached picture</h3>
-              <a href={grievance.attachment.data} target="_blank" rel="noreferrer">
-                <img
-                  src={grievance.attachment.data}
-                  alt={`Attachment for ${grievance.title}`}
-                />
-              </a>
-              <span>{grievance.attachment.name}</span>
-            </div>
-          )}
-        </article>
-
-        <article className="ticket-tracking-panel ticket-tracking-progress">
-          <h2>Progress</h2>
-          {isWithdrawn ? (
-            <p className="ticket-tracking-updated">
-              This grievance was withdrawn and will not be processed further.
-            </p>
-          ) : (
-            <ol className="ticket-tracking-timeline">
-              {steps.map((step) => (
-                <li
-                  key={step.title}
-                  className={[
-                    step.complete ? 'complete' : '',
-                    step.current ? 'current' : '',
-                    step.upcoming ? 'upcoming' : '',
-                  ].filter(Boolean).join(' ')}
-                >
-                  <span className="ticket-tracking-marker" aria-hidden="true" />
-                  <div>
-                    <h3>{step.title}</h3>
-                    <p>{step.description}</p>
-                    {step.title === 'Ticket submitted' && grievance.submittedAt && (
-                      <time dateTime={grievance.submittedAt}>
-                        {formatDate(grievance.submittedAt)}
-                      </time>
-                    )}
-                  </div>
-                </li>
-              ))}
-            </ol>
-          )}
-          {grievance.updated && (
-            <p className="ticket-tracking-updated">
-              Latest update: {grievance.updated}
-            </p>
-          )}
-        </article>
-      </div>
-      <article className="ticket-tracking-panel ticket-tracking-activity">
-        <h2>Responses &amp; case history</h2>
-        {activityState.complaintId !== grievance.id ? (
-          <p>Loading case history…</p>
-        ) : activityState.error ? (
-          <p className="ticket-tracking-activity-error" role="alert">{activityState.error}</p>
-        ) : activityState.activity.length ? (
-          <ol>
-            {activityState.activity.map((activity) => (
-              <li key={activity.id}>
-                <div>
-                  <strong>
-                    {activity.type === 'resolution' ? 'Resolution note' : activity.type}
-                    {' · '}{activity.actor}
-                  </strong>
-                  <time dateTime={activity.createdAt}>
-                    {new Date(activity.createdAt).toLocaleString()}
-                  </time>
-                </div>
-                <p>{activity.message}</p>
-              </li>
-            ))}
-          </ol>
-        ) : (
-          <p>No responses or updates have been recorded yet.</p>
-        )}
-      </article>
     </section>
   );
 }
@@ -226,6 +246,7 @@ export default function MyGrievances({
   onNewGrievance,
   onUpdateGrievance,
   onWithdrawGrievance,
+  onComplaintStatusUpdate,
 }) {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
@@ -235,6 +256,67 @@ export default function MyGrievances({
   const [updateConfirmation, setUpdateConfirmation] = useState(false);
   const [withdrawingId, setWithdrawingId] = useState('');
   const [withdrawalError, setWithdrawalError] = useState({ id: '', message: '' });
+  const [complaintActivity, setComplaintActivity] = useState([]);
+  const [activityLoading, setActivityLoading] = useState(false);
+  const [activityError, setActivityError] = useState('');
+  const [submittingInformation, setSubmittingInformation] = useState(false);
+  const [informationError, setInformationError] = useState('');
+  const trackedGrievanceId = trackedGrievance?.id;
+  useScrollReveal(`${trackedGrievanceId || editingGrievance?.id || statusFilter}:${grievances.length}`);
+
+  const openTracking = (grievance) => {
+    setActivityLoading(true);
+    setActivityError('');
+    setComplaintActivity([]);
+    setTrackedGrievance(grievance);
+  };
+
+  useEffect(() => {
+    if (!trackedGrievanceId) return undefined;
+    let active = true;
+    apiRequest(`/api/complaints/${encodeURIComponent(trackedGrievanceId)}/activity`)
+      .then((result) => {
+        if (active) setComplaintActivity(result.activity);
+      })
+      .catch((error) => {
+        if (active) {
+          setActivityError(error instanceof Error ? error.message : 'Unable to load complaint history.');
+        }
+      })
+      .finally(() => {
+        if (active) setActivityLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [trackedGrievanceId]);
+
+  const handleSubmitAdditionalInformation = async (message) => {
+    if (!trackedGrievance || !message.trim()) return false;
+    setSubmittingInformation(true);
+    setInformationError('');
+    try {
+      const result = await apiRequest(
+        `/api/complaints/${encodeURIComponent(trackedGrievance.id)}/responses`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ message: message.trim() }),
+        },
+      );
+      setTrackedGrievance(result.complaint);
+      setComplaintActivity((previous) => [...previous, result.activity]);
+      onComplaintStatusUpdate?.(result.complaint);
+      return true;
+    } catch (error) {
+      setInformationError(
+        error instanceof Error ? error.message : 'Unable to submit additional information.',
+      );
+      return false;
+    } finally {
+      setSubmittingInformation(false);
+    }
+  };
 
   const departments = useMemo(
     () => [...new Set(grievances.map((grievance) => grievance.category))],
@@ -242,16 +324,17 @@ export default function MyGrievances({
   );
 
   const activeCount = grievances.filter(
-    (grievance) => !['closed', 'withdrawn'].includes(grievance.statusClass),
+    (grievance) => !['closed', 'withdrawn', 'rejected'].includes(grievance.statusClass),
   ).length;
 
   const filteredGrievances = grievances.filter((grievance) => {
     const searchText = `${grievance.id} ${grievance.title} ${grievance.category} ${grievance.department}`.toLowerCase();
     const matchesSearch = searchText.includes(search.trim().toLowerCase());
     const matchesStatus = statusFilter === 'All'
-      || (statusFilter === 'Active' && !['closed', 'withdrawn'].includes(grievance.statusClass))
-      || (statusFilter === 'Resolved' && grievance.statusClass === 'closed')
-      || (statusFilter === 'Withdrawn' && grievance.statusClass === 'withdrawn');
+      || (statusFilter === 'Active' && !['closed', 'withdrawn', 'rejected'].includes(grievance.statusClass))
+      || (statusFilter === 'Resolved' && grievance.status === 'Resolved')
+      || (statusFilter === 'Withdrawn' && grievance.statusClass === 'withdrawn')
+      || grievance.status === statusFilter;
     const matchesDepartment = departmentFilter === 'All'
       || grievance.category === departmentFilter;
 
@@ -285,7 +368,7 @@ export default function MyGrievances({
         onCancel={() => setEditingGrievance(null)}
         onSubmit={(formData) => onUpdateGrievance(editingGrievance.id, formData)}
         onUpdateSuccess={(updatedGrievance) => {
-          setTrackedGrievance(updatedGrievance);
+          openTracking(updatedGrievance);
           setEditingGrievance(null);
           setUpdateConfirmation(true);
         }}
@@ -297,10 +380,18 @@ export default function MyGrievances({
     return (
       <TicketTracking
         grievance={trackedGrievance}
+        activity={complaintActivity}
+        activityLoading={activityLoading}
+        activityError={activityError}
         updateConfirmation={updateConfirmation}
+        onSubmitInformation={handleSubmitAdditionalInformation}
+        submittingInformation={submittingInformation}
+        informationError={informationError}
         onBack={() => {
           setTrackedGrievance(null);
           setUpdateConfirmation(false);
+          setInformationError('');
+          setActivityLoading(false);
         }}
       />
     );
@@ -308,7 +399,7 @@ export default function MyGrievances({
 
   return (
     <section className="my-grievances">
-      <header className="my-grievances-heading">
+      <header className="my-grievances-heading" data-scroll-reveal>
         <div>
           <span className="my-grievances-eyebrow">CASE TRANSPARENCY HUB</span>
           <h1>My Grievances</h1>
@@ -320,7 +411,7 @@ export default function MyGrievances({
         </div>
       </header>
 
-      <div className="grievance-filters">
+      <div className="grievance-filters" data-scroll-reveal>
         <label className="grievance-search">
           <span className="visually-hidden">Search grievances</span>
           <input
@@ -335,8 +426,12 @@ export default function MyGrievances({
           <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
             <option>All</option>
             <option>Active</option>
+            <option>Need More Information</option>
+            <option>In Progress</option>
             <option>Resolved</option>
+            <option>Rejected</option>
             <option>Withdrawn</option>
+            <option>Closed</option>
           </select>
         </label>
         <label className="grievance-filter">
@@ -352,8 +447,14 @@ export default function MyGrievances({
 
       {filteredGrievances.length ? (
         <div className="my-grievance-list">
-          {filteredGrievances.map((grievance) => (
-            <article className="my-grievance-card" key={grievance.id}>
+          {filteredGrievances.map((grievance, index) => (
+            <article
+              className="my-grievance-card"
+              data-scroll-reveal
+              data-interactive-card
+              style={{ '--reveal-delay': `${Math.min(index, 4) * 55}ms` }}
+              key={grievance.id}
+            >
               <div className="my-grievance-card-top">
                 <span className="my-grievance-id">{grievance.id}</span>
                     <span className="my-grievance-category">{grievance.category}</span>
@@ -378,7 +479,7 @@ export default function MyGrievances({
               <button
                 type="button"
                 className="my-grievance-track-button"
-                onClick={() => setTrackedGrievance(grievance)}
+                onClick={() => openTracking(grievance)}
               >
                 Track Ticket
               </button>

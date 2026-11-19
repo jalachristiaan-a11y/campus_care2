@@ -12,13 +12,26 @@ const allowedCategories = new Set([
   'Safety and Security',
   'Other',
 ]);
-const allowedStatuses = new Set(['Under Review', 'In Progress', 'Resolved']);
+const allowedStatuses = new Set([
+  'Under Review',
+  'Need More Information',
+  'In Progress',
+  'Resolved',
+  'Rejected',
+  'Closed',
+]);
 const attachmentPattern = /^data:(image\/(?:jpeg|png|webp|gif));base64,([A-Za-z0-9+/]+={0,2})$/;
 
 const formatComplaint = (row) => {
   const submittedAt = row.created_at.toISOString();
   const statusClass = row.status === 'Resolved'
     ? 'closed'
+    : row.status === 'Closed'
+      ? 'closed'
+    : row.status === 'Rejected'
+      ? 'rejected'
+    : row.status === 'Need More Information'
+      ? 'needs-info'
     : row.status === 'Withdrawn'
       ? 'withdrawn'
     : row.status === 'In Progress'
@@ -227,10 +240,76 @@ router.get('/:complaintId/activity', async (req, res) => {
   }
 });
 
-router.post('/:complaintId/responses', authorizeRoles('admin'), async (req, res) => {
+router.post('/:complaintId/responses', async (req, res) => {
   const message = typeof req.body?.message === 'string' ? req.body.message.trim() : '';
   if (!message || message.length > 3000) {
     return res.status(400).json({ message: 'Enter a response up to 3000 characters.' });
+  }
+
+  if (req.user.role === 'student') {
+    try {
+      const result = await db.query(
+        `WITH updated AS (
+           UPDATE complaints
+           SET status = 'Under Review', updated_at = CURRENT_TIMESTAMP
+           WHERE public_id = $1 AND user_id = $2 AND status = 'Need More Information'
+           RETURNING id, public_id, category, title, description, location, status,
+                     department, created_at, updated_at, submitted_by,
+                     submitted_by_name, student_id, attachment
+         ), logged AS (
+           INSERT INTO complaint_activity
+             (complaint_id, actor_user_id, actor_role, event_type, message)
+           SELECT id, $2, 'student', 'additional_information', $3 FROM updated
+           RETURNING id, complaint_id, event_type, message, actor_role, created_at
+         ), status_logged AS (
+           INSERT INTO complaint_activity
+             (complaint_id, actor_user_id, actor_role, event_type, message)
+           SELECT id, $2, 'admin', 'status',
+                  'Status changed to Under Review after the student provided additional information.'
+           FROM updated
+         )
+         SELECT updated.*, logged.id AS activity_id,
+                logged.event_type AS activity_type,
+                logged.message AS activity_message,
+                logged.actor_role AS activity_actor_role,
+                logged.created_at AS activity_created_at
+         FROM updated
+         JOIN logged ON logged.complaint_id = updated.id`,
+        [req.params.complaintId, req.user.id, message],
+      );
+      if (!result.rows[0]) {
+        const existing = await db.query(
+          'SELECT status FROM complaints WHERE public_id = $1 AND user_id = $2',
+          [req.params.complaintId, req.user.id],
+        );
+        if (!existing.rows[0]) {
+          return res.status(404).json({ message: 'Complaint not found.' });
+        }
+        return res.status(409).json({
+          message: 'Additional information can only be sent when the complaint requests more information.',
+        });
+      }
+
+      const row = result.rows[0];
+      return res.status(201).json({
+        complaint: formatComplaint(row),
+        activity: formatActivity({
+          id: row.activity_id,
+          event_type: row.activity_type,
+          message: row.activity_message,
+          actor_role: row.activity_actor_role,
+          actor_name: req.user.full_name,
+          created_at: row.activity_created_at,
+        }),
+      });
+    } catch (error) {
+      console.error('Student additional information save error:', error);
+      return res.status(500).json({ message: 'Unable to submit additional information.' });
+    }
+  }
+
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ message: 'You do not have permission to respond to complaints.' });
   }
 
   try {
@@ -380,17 +459,24 @@ router.delete('/:complaintId', authorizeRoles('student'), async (req, res) => {
 
 router.patch('/:complaintId/status', authorizeRoles('admin'), async (req, res) => {
   const status = typeof req.body?.status === 'string' ? req.body.status.trim() : '';
-  const resolutionNote = typeof req.body?.resolutionNote === 'string'
-    ? req.body.resolutionNote.trim()
+  const statusNote = typeof req.body?.statusNote === 'string'
+    ? req.body.statusNote.trim()
+    : typeof req.body?.resolutionNote === 'string'
+      ? req.body.resolutionNote.trim()
     : '';
   if (!allowedStatuses.has(status)) {
     return res.status(400).json({ message: 'Choose a valid complaint status.' });
   }
   if (
-    status === 'Resolved'
-    && (!resolutionNote || resolutionNote.length > 3000)
+    ['Resolved', 'Rejected', 'Need More Information'].includes(status)
+    && (!statusNote || statusNote.length > 3000)
   ) {
-    return res.status(400).json({ message: 'Add a resolution note up to 3000 characters before resolving this complaint.' });
+    return res.status(400).json({
+      message: `Add a note up to 3000 characters before setting this complaint to ${status.toLowerCase()}.`,
+    });
+  }
+  if (statusNote.length > 3000) {
+    return res.status(400).json({ message: 'The status note must be 3000 characters or fewer.' });
   }
 
   try {
@@ -398,7 +484,15 @@ router.patch('/:complaintId/status', authorizeRoles('admin'), async (req, res) =
       `WITH updated AS (
          UPDATE complaints
          SET status = $1, updated_at = CURRENT_TIMESTAMP
-         WHERE public_id = $2 AND status <> 'Withdrawn'
+         WHERE public_id = $2
+           AND (
+             ($1 = 'Under Review' AND status = 'Need More Information')
+             OR ($1 = 'Need More Information' AND status IN ('Under Review', 'In Progress'))
+             OR ($1 = 'In Progress' AND status IN ('Under Review', 'Need More Information', 'Resolved', 'Rejected', 'Closed'))
+             OR ($1 = 'Resolved' AND status IN ('Under Review', 'Need More Information', 'In Progress'))
+             OR ($1 = 'Rejected' AND status IN ('Under Review', 'Need More Information', 'In Progress'))
+             OR ($1 = 'Closed' AND status = 'Resolved')
+           )
          RETURNING id, public_id, category, title, description, location, status,
                    department, created_at, updated_at, submitted_by,
                    submitted_by_name, student_id, attachment
@@ -413,11 +507,20 @@ router.patch('/:complaintId/status', authorizeRoles('admin'), async (req, res) =
         req.params.complaintId,
         req.user.id,
         status === 'Resolved' ? 'resolution' : 'status',
-        status === 'Resolved' ? resolutionNote : `Status changed to ${status}.`,
+        statusNote || `Status changed to ${status}.`,
       ],
     );
     if (!result.rows[0]) {
-      return res.status(404).json({ message: 'Complaint not found.' });
+      const existing = await db.query(
+        'SELECT status FROM complaints WHERE public_id = $1',
+        [req.params.complaintId],
+      );
+      if (!existing.rows[0]) {
+        return res.status(404).json({ message: 'Complaint not found.' });
+      }
+      return res.status(409).json({
+        message: `A complaint with status ${existing.rows[0].status} cannot be changed to ${status}.`,
+      });
     }
 
     return res.json({ complaint: formatComplaint(result.rows[0]) });

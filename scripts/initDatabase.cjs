@@ -52,7 +52,7 @@ const initializeDatabase = async () => {
         description VARCHAR(3000) NOT NULL,
         location VARCHAR(120) NOT NULL DEFAULT '',
         attachment JSONB,
-        status VARCHAR(20) NOT NULL DEFAULT 'Under Review'
+        status VARCHAR(32) NOT NULL DEFAULT 'Under Review'
           CHECK (status IN ('Under Review', 'In Progress', 'Resolved')),
         department VARCHAR(100) NOT NULL DEFAULT 'Awaiting assignment',
         created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -61,12 +61,24 @@ const initializeDatabase = async () => {
     `);
     await client.query(`
       ALTER TABLE complaints
+      ALTER COLUMN status TYPE VARCHAR(32)
+    `);
+    await client.query(`
+      ALTER TABLE complaints
       DROP CONSTRAINT IF EXISTS complaints_status_check
     `);
     await client.query(`
       ALTER TABLE complaints
       ADD CONSTRAINT complaints_status_check
-      CHECK (status IN ('Under Review', 'In Progress', 'Resolved', 'Withdrawn'))
+      CHECK (status IN (
+        'Under Review',
+        'Need More Information',
+        'In Progress',
+        'Resolved',
+        'Rejected',
+        'Withdrawn',
+        'Closed'
+      ))
     `);
     await client.query(`
       CREATE INDEX IF NOT EXISTS complaints_user_created_idx

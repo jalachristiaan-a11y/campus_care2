@@ -26,6 +26,7 @@ const sessionCookieOptions = () => ({
   secure: process.env.NODE_ENV === 'production',
   sameSite: 'lax',
   path: '/',
+  maxAge: SESSION_TTL_MS,
 });
 
 const setSessionCookie = (res, sessionId) => {

@@ -1,11 +1,34 @@
-import { useState } from 'react';
-import { CheckCircle2, Clock, Heart, HelpCircle, Lock, Mail, MapPin, MessageSquare, Phone, Send, ShieldAlert, Sparkles, ArrowUpRight, UserCheck, Users } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { CheckCircle2, Clock, Heart, HelpCircle, Lock, Mail, MapPin, Menu, MessageSquare, Phone, Send, ShieldAlert, Sparkles, ArrowUpRight, UserCheck, Users, X } from 'lucide-react';
 import campusBuildingBackground from './assets/campus-building-background.png';
 import campusCareLogo from './assets/campuscare-logo.png';
+import campusLawn from './assets/wmsu-campus-lawn.png';
+import engineeringBuilding from './assets/wmsu-engineering-building.png';
+import heritageBuilding from './assets/wmsu-heritage-building.png';
+import mainCampusBuilding from './assets/wmsu-main-campus-building.png';
+import registrarBuilding from './assets/wmsu-registrar-building.png';
+import studentCommunity from './assets/wmsu-student-community-palaro-2025.png';
+
 export default function CampusCareLanding({ onLogin }) {
   const [contactStatus, setContactStatus] = useState('');
+  const [isScrolled, setIsScrolled] = useState(() => window.scrollY > 24);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  useEffect(() => {
+    const updateScrollState = () => setIsScrolled(window.scrollY > 24);
+    window.addEventListener('scroll', updateScrollState, { passive: true });
+    return () => window.removeEventListener('scroll', updateScrollState);
+  }, []);
+
   const scrollToSection = (id) => {
-    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
+    setMobileMenuOpen(false);
+    const behavior = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
+    const section = document.getElementById(id);
+    if (!section) return;
+    const top = Math.max(0, window.scrollY + section.getBoundingClientRect().top - 112);
+    section.classList.add('is-visible');
+    setIsScrolled(top > 24);
+    window.scrollTo({ top, behavior });
   };
 
   const handleContactSubmit = (event) => {
@@ -80,9 +103,17 @@ export default function CampusCareLanding({ onLogin }) {
     },
   ];
   const tags = ['#CrimsonCares', '#NormaliteVoice', '#SafeSpacesWMSU', '#MentalWellness', '#StudentSolidarity'];
+  const campusPhotos = [
+    { src: mainCampusBuilding, alt: 'A main campus building at Western Mindanao State University', caption: 'A campus built around possibility', layout: 'campus-photo--feature' },
+    { src: studentCommunity, alt: 'WMSU Gender Association students gathered at Palaro 2025', caption: 'Student voices shape a stronger community', layout: 'campus-photo--community' },
+    { src: engineeringBuilding, alt: 'The WMSU College of Engineering building', caption: 'College of Engineering', layout: 'campus-photo--detail' },
+    { src: registrarBuilding, alt: 'The University Registrar Building at WMSU', caption: 'University Registrar', layout: 'campus-photo--detail' },
+    { src: heritageBuilding, alt: 'A heritage-style academic building surrounded by trees on campus', caption: 'A familiar campus landmark', layout: 'campus-photo--wide' },
+    { src: campusLawn, alt: 'The WMSU campus lawn and academic building', caption: 'Space to grow, learn, and belong', layout: 'campus-photo--wide' },
+  ];
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[#f7f8fa] font-sans text-slate-800 selection:bg-rose-100 selection:text-rose-600">
+    <div className="relative min-h-screen overflow-clip bg-[#f7f8fa] font-sans text-slate-800 selection:bg-rose-100 selection:text-rose-600">
       <div
         className="fixed inset-0 z-0 pointer-events-none bg-cover bg-center opacity-25 blur-[2px]"
         style={{
@@ -94,7 +125,7 @@ export default function CampusCareLanding({ onLogin }) {
       />
 
       <div className="relative z-10 mx-auto max-w-6xl px-4 py-4 sm:px-6 lg:px-8">
-        <header className="sticky top-4 z-40 flex items-center justify-between rounded-full border border-slate-200/80 bg-white/90 px-4 py-3.5 shadow-sm backdrop-blur-md sm:px-6">
+        <header className={`landing-header sticky top-4 z-40 flex items-center justify-between rounded-full border border-slate-200/80 bg-white/85 px-4 py-3.5 shadow-sm backdrop-blur-md sm:px-6${isScrolled ? ' is-scrolled' : ''}`}>
           <a href="#top" className="flex items-center gap-3" aria-label="CampusCare home">
             <span className="flex h-8 w-8 items-center justify-center rounded-full border border-rose-200 bg-rose-50 text-rose-600">
               <img src={campusCareLogo} alt="" aria-hidden="true" className="h-full w-full object-contain" />
@@ -105,25 +136,30 @@ export default function CampusCareLanding({ onLogin }) {
             </span>
           </a>
 
-          <nav className="hidden items-center gap-8 text-xs font-semibold text-slate-600 md:flex" aria-label="Main navigation">
-            <button type="button" onClick={() => scrollToSection('about')} className="transition-colors hover:text-rose-600">About Us</button>
-            <button type="button" onClick={() => scrollToSection('community')} className="transition-colors hover:text-rose-600">Community</button>
-            <button type="button" onClick={() => scrollToSection('contact')} className="transition-colors hover:text-rose-600">Contact</button>
+          <nav id="landing-nav-menu" className={`landing-nav-links${mobileMenuOpen ? ' is-open' : ''}`} aria-label="Main navigation">
+            <button type="button" onClick={() => scrollToSection('about')} className="landing-nav-link">About Us</button>
+            <button type="button" onClick={() => scrollToSection('community')} className="landing-nav-link">Community</button>
+            <button type="button" onClick={() => scrollToSection('contact')} className="landing-nav-link">Contact</button>
           </nav>
 
-          <button type="button" onClick={onLogin} className="rounded-full bg-[#800020] px-5 py-2 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-[#660019]">
+          <button
+            type="button"
+            className="landing-menu-toggle"
+            aria-label={mobileMenuOpen ? 'Close navigation menu' : 'Open navigation menu'}
+            aria-expanded={mobileMenuOpen}
+            aria-controls="landing-nav-menu"
+            onClick={() => setMobileMenuOpen((isOpen) => !isOpen)}
+          >
+            {mobileMenuOpen ? <X size={19} aria-hidden="true" /> : <Menu size={19} aria-hidden="true" />}
+          </button>
+
+          <button type="button" onClick={() => { setMobileMenuOpen(false); onLogin(); }} className="rounded-full bg-[#800020] px-5 py-2 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-[#660019]">
             Log In
           </button>
         </header>
 
         <main id="top">
-          <section className="mx-auto max-w-3xl pb-16 pt-20 text-center">
-            <div className="mb-8 inline-flex flex-wrap items-center justify-center gap-2 rounded-full border border-slate-200 bg-white/80 px-3.5 py-1.5 text-xs text-slate-600 shadow-sm">
-              <span className="h-2 w-2 animate-pulse rounded-full bg-rose-500" />
-              <span className="font-medium text-slate-700">Student Complaint and Grievance Tracking System</span>
-              <span className="text-slate-300">|</span>
-              <span className="text-slate-500">WMSU Institutional Portal</span>
-            </div>
+          <section className="mx-auto max-w-3xl pb-16 pt-20 text-center" data-scroll-reveal>
             <h1 className="mb-6 text-4xl font-black leading-tight tracking-tight text-slate-900 sm:text-5xl">
               Your voice, our commitment.
             </h1>
@@ -141,8 +177,8 @@ export default function CampusCareLanding({ onLogin }) {
           </section>
 
           <section className="mb-24 grid grid-cols-1 gap-6 md:grid-cols-3" aria-label="CampusCare features">
-            {featureCards.map(({ icon: Icon, title, description }) => (
-              <article key={title} className="rounded-2xl border border-slate-100 bg-white/85 p-6 shadow-sm backdrop-blur-sm transition-shadow hover:shadow-md">
+            {featureCards.map(({ icon: Icon, title, description }, index) => (
+              <article key={title} data-scroll-reveal data-interactive-card style={{ '--reveal-delay': `${index * 70}ms` }} className="rounded-2xl border border-slate-100 bg-white/85 p-6 shadow-sm backdrop-blur-sm transition-shadow hover:shadow-md">
                 <span className="mb-4 flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-700"><Icon className="h-4 w-4" aria-hidden="true" /></span>
                 <h2 className="mb-2 text-sm font-bold text-slate-900">{title}</h2>
                 <p className="text-xs leading-relaxed text-slate-500">{description}</p>
@@ -150,7 +186,51 @@ export default function CampusCareLanding({ onLogin }) {
             ))}
           </section>
 
-          <section id="about" className="scroll-mt-24 py-16">
+          <section className="campus-photo-section mb-20" data-scroll-reveal aria-labelledby="campus-photo-title">
+            <div className="campus-photo-heading">
+              <h2 id="campus-photo-title">A campus worth speaking up for.</h2>
+              <p>From the places we learn to the people who make WMSU feel like home, every Normalite deserves to be heard.</p>
+            </div>
+            <div className="campus-photo-grid">
+              {campusPhotos.map(({ src, alt, caption, layout }, index) => (
+                <figure
+                  key={src}
+                  className={`campus-photo-tile ${layout}`}
+                  style={{ '--campus-photo-delay': `${Math.min(index * 65, 260)}ms` }}
+                >
+                  <img src={src} alt={alt} loading="lazy" decoding="async" />
+                  <figcaption>{caption}</figcaption>
+                </figure>
+              ))}
+            </div>
+          </section>
+
+          <section className="campus-video-section" data-scroll-reveal aria-labelledby="campus-video-title">
+            <div className="campus-video-heading">
+              <h2 id="campus-video-title">Welcome to Western Mindanao State University!</h2>
+              <p>Watch the official video from WMSU Specials.</p>
+            </div>
+            <div className="campus-video-frame">
+              <iframe
+                src="https://www.youtube-nocookie.com/embed/JoimFFEafbE"
+                title="Welcome to Western Mindanao State University! — WMSU Specials"
+                loading="lazy"
+                referrerPolicy="strict-origin-when-cross-origin"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                allowFullScreen
+              />
+            </div>
+            <a
+              className="campus-video-link"
+              href="https://www.youtube.com/watch?v=JoimFFEafbE"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Open video on YouTube
+            </a>
+          </section>
+
+          <section id="about" className="scroll-mt-24 py-16" data-scroll-reveal>
             <div className="mx-auto mb-12 max-w-2xl text-center">
               <span className="mb-3 inline-flex items-center gap-1.5 rounded-full border border-rose-100 bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-600">
                 <ShieldAlert className="h-3.5 w-3.5" aria-hidden="true" /> Institutional Trust &amp; Mission
@@ -161,8 +241,8 @@ export default function CampusCareLanding({ onLogin }) {
               </p>
             </div>
             <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-              {aboutCards.map(({ icon: Icon, title, description, note }) => (
-                <article key={title} className="flex flex-col justify-between rounded-2xl border border-slate-100 bg-white/90 p-6 shadow-sm">
+              {aboutCards.map(({ icon: Icon, title, description, note }, index) => (
+                <article key={title} data-scroll-reveal data-interactive-card style={{ '--reveal-delay': `${index * 70}ms` }} className="flex flex-col justify-between rounded-2xl border border-slate-100 bg-white/90 p-6 shadow-sm">
                   <div>
                     <span className="mb-4 flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-700"><Icon className="h-4 w-4" aria-hidden="true" /></span>
                     <h3 className="mb-2 text-sm font-bold text-slate-900">{title}</h3>
@@ -176,7 +256,7 @@ export default function CampusCareLanding({ onLogin }) {
             </div>
           </section>
 
-          <section className="my-16 flex flex-col items-center justify-between gap-6 rounded-3xl border border-slate-200/80 bg-white/90 p-8 shadow-sm sm:p-10 md:flex-row">
+          <section className="my-16 flex flex-col items-center justify-between gap-6 rounded-3xl border border-slate-200/80 bg-white/90 p-8 shadow-sm sm:p-10 md:flex-row" data-scroll-reveal>
             <div>
               <span className="mb-2 inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-rose-600">
                 <ShieldAlert className="h-3.5 w-3.5" aria-hidden="true" /> Student Rights &amp; Due Process
@@ -190,7 +270,7 @@ export default function CampusCareLanding({ onLogin }) {
             </div>
           </section>
 
-          <section id="community" className="scroll-mt-24 py-16">
+          <section id="community" className="scroll-mt-24 py-16" data-scroll-reveal>
             <div className="mx-auto mb-12 max-w-2xl text-center">
               <span className="mb-3 inline-flex items-center gap-1.5 rounded-full border border-rose-100 bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-600">
                 <Heart className="h-3.5 w-3.5 fill-rose-500 text-rose-500" aria-hidden="true" /> Normalite Solidarity &amp; Care
@@ -201,8 +281,8 @@ export default function CampusCareLanding({ onLogin }) {
               </p>
             </div>
             <div className="mb-8 grid grid-cols-1 gap-6 md:grid-cols-3">
-              {communityCards.map(({ icon: Icon, title, description, note }) => (
-                <article key={title} className="flex flex-col justify-between rounded-2xl border border-slate-100 bg-white/90 p-6 shadow-sm">
+              {communityCards.map(({ icon: Icon, title, description, note }, index) => (
+                <article key={title} data-scroll-reveal data-interactive-card style={{ '--reveal-delay': `${index * 70}ms` }} className="flex flex-col justify-between rounded-2xl border border-slate-100 bg-white/90 p-6 shadow-sm">
                   <div>
                     <span className="mb-4 flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-700"><Icon className="h-4 w-4" aria-hidden="true" /></span>
                     <h3 className="mb-2 text-sm font-bold text-slate-900">{title}</h3>
@@ -223,7 +303,7 @@ export default function CampusCareLanding({ onLogin }) {
             </div>
           </section>
 
-          <section id="contact" className="scroll-mt-24 py-16">
+          <section id="contact" className="scroll-mt-24 py-16" data-scroll-reveal>
             <div className="mx-auto mb-12 max-w-2xl text-center">
               <span className="mb-3 inline-flex items-center gap-1.5 rounded-full border border-rose-100 bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-600">
                 <Mail className="h-3.5 w-3.5" aria-hidden="true" /> Get In Touch

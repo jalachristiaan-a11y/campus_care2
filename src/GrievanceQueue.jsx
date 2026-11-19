@@ -19,12 +19,15 @@ import {
   UserPlus,
   Check,
   LogOut,
+  Menu,
   Sparkles,
-  Send
+  Send,
+  X,
 } from 'lucide-react';
 import LogoutConfirmation from './LogoutConfirmation.jsx';
 import { apiRequest } from './apiClient.js';
 import campusCareLogo from './assets/campuscare-logo.png';
+import useScrollReveal from './useScrollReveal.js';
 
 const departmentList = [
   'CPPO Facilities & Plant',
@@ -36,9 +39,9 @@ const departmentList = [
 ];
 
 const mapComplaintToCase = (complaint, slaSettings) => {
-  const resolved = complaint.status === 'Resolved';
+  const resolved = ['Resolved', 'Closed'].includes(complaint.status);
   const withdrawn = complaint.status === 'Withdrawn';
-  const inactive = resolved || withdrawn;
+  const inactive = resolved || withdrawn || complaint.status === 'Rejected';
   const safetyCase = complaint.category === 'Safety and Security';
   const slaLimit = Number(safetyCase ? slaSettings.urgentSlaHours : slaSettings.slaHours);
   const elapsedHours = Math.max(0, (Date.now() - Date.parse(complaint.submittedAt)) / 3600000);
@@ -57,14 +60,18 @@ const mapComplaintToCase = (complaint, slaSettings) => {
     avatar: (complaint.submittedByName || complaint.submittedBy || 'S').slice(0, 2).toUpperCase(),
     avatarBg: 'bg-rose-100 text-[#800020]',
     category: complaint.category,
-    sla: resolved ? 'Resolved' : withdrawn ? 'Withdrawn' : overdue ? `Overdue by ${Math.floor(elapsedHours - slaLimit)}h` : `Due in ${Math.ceil(slaLimit - elapsedHours)}h`,
-    slaStatus: resolved ? 'resolved' : withdrawn ? 'withdrawn' : overdue ? 'urgent' : 'normal',
+    sla: resolved ? complaint.status : withdrawn ? 'Withdrawn' : complaint.status === 'Rejected' ? 'Rejected' : overdue ? `Overdue by ${Math.floor(elapsedHours - slaLimit)}h` : `Due in ${Math.ceil(slaLimit - elapsedHours)}h`,
+    slaStatus: resolved ? 'resolved' : withdrawn ? 'withdrawn' : complaint.status === 'Rejected' ? 'rejected' : overdue ? 'urgent' : 'normal',
     assignedDesk: complaint.department || 'Awaiting assignment',
     status: complaint.status,
     statusColor: complaint.statusClass === 'withdrawn'
       ? 'text-slate-600 bg-slate-100'
       : complaint.statusClass === 'closed'
       ? 'text-emerald-600 bg-emerald-50'
+      : complaint.statusClass === 'rejected'
+        ? 'text-rose-700 bg-rose-50'
+      : complaint.statusClass === 'needs-info'
+        ? 'text-violet-700 bg-violet-50'
       : complaint.statusClass === 'progress'
         ? 'text-blue-600 bg-blue-50'
         : 'text-amber-600 bg-amber-50',
@@ -72,6 +79,10 @@ const mapComplaintToCase = (complaint, slaSettings) => {
       ? 'bg-slate-500'
       : complaint.statusClass === 'closed'
       ? 'bg-emerald-600'
+      : complaint.statusClass === 'rejected'
+        ? 'bg-rose-600'
+      : complaint.statusClass === 'needs-info'
+        ? 'bg-violet-600'
       : complaint.statusClass === 'progress'
         ? 'bg-blue-600'
         : 'bg-amber-500',
@@ -90,6 +101,7 @@ const resolveNoticeRecipient = (recipientValue) => {
 };
 export default function GrievanceQueue({ user = {}, onLogout }) {
   const [logoutConfirmationOpen, setLogoutConfirmationOpen] = useState(false);
+  const [adminMenuOpen, setAdminMenuOpen] = useState(false);
   const [activeNav, setActiveNav] = useState('Grievance Queue');
   const [activeTab, setActiveTab] = useState('All Cases');
   const [analyticsRange, setAnalyticsRange] = useState('Last 28 days');
@@ -102,6 +114,7 @@ export default function GrievanceQueue({ user = {}, onLogout }) {
   const [resolutionNote, setResolutionNote] = useState('');
   const [activitySaving, setActivitySaving] = useState(false);
   const [activityError, setActivityError] = useState('');
+  const resolutionNoteFieldRef = useRef(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [notificationMsg, setNotificationMsg] = useState(null);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -130,6 +143,7 @@ export default function GrievanceQueue({ user = {}, onLogout }) {
   const [cases, setCases] = useState([]);
   const [casesLoading, setCasesLoading] = useState(true);
   const [casesError, setCasesError] = useState('');
+  useScrollReveal(`${activeNav}:${activeTab}`);
   const [analyticsNow, setAnalyticsNow] = useState(0);
   const adminName = user.fullName || user.universityEmail?.split('@')[0] || 'Administrator';
   const adminInitials = adminName
@@ -139,6 +153,15 @@ export default function GrievanceQueue({ user = {}, onLogout }) {
     .map((part) => part[0])
     .join('')
     .toUpperCase();
+
+  useEffect(() => {
+    if (!adminMenuOpen) return undefined;
+    const closeOnEscape = (event) => {
+      if (event.key === 'Escape') setAdminMenuOpen(false);
+    };
+    document.addEventListener('keydown', closeOnEscape);
+    return () => document.removeEventListener('keydown', closeOnEscape);
+  }, [adminMenuOpen]);
 
   const showNotification = (message, type = 'success') => {
     setNotificationMsg({ message, type });
@@ -221,7 +244,7 @@ export default function GrievanceQueue({ user = {}, onLogout }) {
 
   const adminNotifications = useMemo(
     () => cases
-      .filter((caseItem) => caseItem.status !== 'Resolved')
+      .filter((caseItem) => !['Resolved', 'Rejected', 'Withdrawn', 'Closed'].includes(caseItem.status))
       .slice(0, 5)
       .map((caseItem) => ({
         id: caseItem.id,
@@ -358,7 +381,7 @@ export default function GrievanceQueue({ user = {}, onLogout }) {
     try {
       const result = await apiRequest(
         `/api/complaints/${encodeURIComponent(caseItem.grievanceId)}/status`,
-        { method: 'PATCH', body: JSON.stringify({ status, resolutionNote: note }) },
+        { method: 'PATCH', body: JSON.stringify({ status, statusNote: note }) },
       );
       updatedComplaint = mapComplaintToCase(result.complaint, { slaHours, urgentSlaHours });
     } catch (error) {
@@ -400,6 +423,11 @@ export default function GrievanceQueue({ user = {}, onLogout }) {
     const caseItem = cases.find((item) => item.id === caseId);
     if (caseItem) openCaseDetails(caseItem);
     setOpenMenuId(null);
+  };
+
+  const showResolutionNote = () => {
+    resolutionNoteFieldRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    resolutionNoteFieldRef.current?.focus();
   };
 
   const handleSendComplaintResponse = async () => {
@@ -561,9 +589,12 @@ export default function GrievanceQueue({ user = {}, onLogout }) {
       if (!matchesSearch) return false;
 
       if (activeTab === 'Under Review') return item.status === 'Under Review';
+      if (activeTab === 'Need More Information') return item.status === 'Need More Information';
       if (activeTab === 'In Progress') return item.status === 'In Progress';
       if (activeTab === 'Urgent Escalations') return item.slaStatus === 'urgent' || item.status === 'Urgent Review';
       if (activeTab === 'Resolved') return item.status === 'Resolved';
+      if (activeTab === 'Rejected') return item.status === 'Rejected';
+      if (activeTab === 'Closed') return item.status === 'Closed';
       return true;
     });
   }, [cases, searchQuery, activeTab]);
@@ -571,9 +602,12 @@ export default function GrievanceQueue({ user = {}, onLogout }) {
   const tabs = [
     { label: 'All Cases', count: cases.length },
     { label: 'Under Review', count: cases.filter((c) => c.status === 'Under Review').length },
+    { label: 'Need More Information', count: cases.filter((c) => c.status === 'Need More Information').length },
     { label: 'In Progress', count: cases.filter((c) => c.status === 'In Progress').length },
     { label: 'Urgent Escalations', count: cases.filter((c) => c.slaStatus === 'urgent' || c.status === 'Urgent Review').length },
-    { label: 'Resolved', count: cases.filter((c) => c.status === 'Resolved').length }
+    { label: 'Resolved', count: cases.filter((c) => c.status === 'Resolved').length },
+    { label: 'Rejected', count: cases.filter((c) => c.status === 'Rejected').length },
+    { label: 'Closed', count: cases.filter((c) => c.status === 'Closed').length }
   ];
 
   const analyticsDays = Number(analyticsRange.match(/\d+/)?.[0] || 28);
@@ -584,8 +618,10 @@ export default function GrievanceQueue({ user = {}, onLogout }) {
   const analyticsCases = useMemo(() => cases.filter((caseItem) => (
     Date.parse(caseItem.submittedAt) >= analyticsStart.getTime()
   )), [cases, analyticsStart]);
-  const resolvedAnalyticsCount = analyticsCases.filter((caseItem) => caseItem.status === 'Resolved').length;
-  const pendingAnalyticsCount = analyticsCases.length - resolvedAnalyticsCount;
+  const resolvedAnalyticsCount = analyticsCases.filter((caseItem) => ['Resolved', 'Closed'].includes(caseItem.status)).length;
+  const pendingAnalyticsCount = analyticsCases.filter((caseItem) => (
+    !['Resolved', 'Rejected', 'Withdrawn', 'Closed'].includes(caseItem.status)
+  )).length;
   const categoryStats = useMemo(() => {
     const stats = new Map();
     analyticsCases.forEach((caseItem) => {
@@ -599,8 +635,8 @@ export default function GrievanceQueue({ user = {}, onLogout }) {
     const stats = new Map();
     cases.forEach((caseItem) => {
       const current = stats.get(caseItem.assignedDesk) || { name: caseItem.assignedDesk, active: 0, resolved: 0 };
-      if (caseItem.status === 'Resolved') current.resolved += 1;
-      else current.active += 1;
+      if (['Resolved', 'Closed'].includes(caseItem.status)) current.resolved += 1;
+      else if (!['Rejected', 'Withdrawn'].includes(caseItem.status)) current.active += 1;
       stats.set(caseItem.assignedDesk, current);
     });
     return [...stats.values()].sort((left, right) => left.name.localeCompare(right.name));
@@ -643,6 +679,31 @@ export default function GrievanceQueue({ user = {}, onLogout }) {
   const incomingTodayCount = cases.filter((caseItem) => (
     Date.parse(caseItem.submittedAt) >= startOfToday.getTime()
   )).length;
+  const selectedCaseIndex = selectedCase
+    ? cases.findIndex((caseItem) => caseItem.id === selectedCase.id)
+    : -1;
+  const selectedCaseSubmittedAt = selectedCase ? new Date(selectedCase.submittedAt) : null;
+  const selectedCaseProgressIndex = selectedCase?.status === 'Under Review'
+    ? 1
+    : selectedCase?.status === 'In Progress'
+      ? 2
+      : ['Resolved', 'Rejected', 'Withdrawn', 'Closed'].includes(selectedCase?.status)
+        ? 3
+        : -1;
+  const selectedCaseTimeline = [
+    'Submitted',
+    'Under Review',
+    'In Progress',
+    selectedCase?.status === 'Need More Information'
+      ? 'Need More Info'
+      : selectedCase?.status === 'Rejected'
+        ? 'Rejected'
+        : selectedCase?.status === 'Withdrawn'
+          ? 'Withdrawn'
+          : selectedCase?.status === 'Closed'
+            ? 'Closed'
+            : 'Resolved',
+  ];
 
   return (
     <div className="flex h-screen bg-slate-100 text-slate-700 font-sans p-2 sm:p-4">
@@ -650,7 +711,7 @@ export default function GrievanceQueue({ user = {}, onLogout }) {
       <div className="flex flex-1 bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-100">
         
         {/* Sidebar */}
-        <aside className="w-64 m-4 mr-0 rounded-2xl bg-gradient-to-b from-[#a00028] via-[#800020] to-[#66001a] p-5 flex flex-col justify-between hidden md:flex shrink-0 text-white">
+        <aside className={`admin-sidebar w-64 m-4 mr-0 rounded-2xl bg-gradient-to-b from-[#a00028] via-[#800020] to-[#66001a] p-5 flex flex-col justify-between hidden md:flex shrink-0 text-white${adminMenuOpen ? ' mobile-open' : ''}`}>
           <div>
             {/* Logo */}
             <div className="flex items-center gap-3 mb-7">
@@ -664,7 +725,7 @@ export default function GrievanceQueue({ user = {}, onLogout }) {
             </div>
 
             {/* Navigation Menu */}
-            <nav className="space-y-1">
+            <nav id="admin-sidebar-navigation" className="space-y-1">
               {navItems.map((item) => {
                 const Icon = item.icon;
                 const isActive = activeNav === item.label;
@@ -672,7 +733,10 @@ export default function GrievanceQueue({ user = {}, onLogout }) {
                   <button
                     key={item.label}
                     type="button"
-                    onClick={() => setActiveNav(item.label)}
+                    onClick={() => {
+                      setActiveNav(item.label);
+                      setAdminMenuOpen(false);
+                    }}
                     className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                       isActive
                         ? 'bg-white/20 text-white shadow-xs'
@@ -699,6 +763,14 @@ export default function GrievanceQueue({ user = {}, onLogout }) {
             </button>
           </div>
         </aside>
+        {adminMenuOpen && (
+          <button
+            type="button"
+            className="admin-menu-backdrop"
+            aria-label="Close admin navigation"
+            onClick={() => setAdminMenuOpen(false)}
+          />
+        )}
 
         {/* Main Content Area */}
         <main className="flex-1 flex flex-col overflow-y-auto">
@@ -707,6 +779,16 @@ export default function GrievanceQueue({ user = {}, onLogout }) {
           <header className="sticky top-0 z-20 flex flex-col gap-3 bg-slate-50/95 px-4 py-4 sm:px-6 lg:px-8">
             <div className="flex min-h-14 items-center justify-between gap-3 rounded-full border border-slate-200/80 bg-white/95 px-4 py-2.5 shadow-sm backdrop-blur-md sm:px-5">
               <div className="flex min-w-0 items-center gap-2.5">
+                <button
+                  type="button"
+                  className="admin-menu-toggle md:hidden"
+                  aria-label={adminMenuOpen ? 'Close admin navigation' : 'Open admin navigation'}
+                  aria-expanded={adminMenuOpen}
+                  aria-controls="admin-sidebar-navigation"
+                  onClick={() => setAdminMenuOpen((isOpen) => !isOpen)}
+                >
+                  {adminMenuOpen ? <X className="h-4 w-4" aria-hidden="true" /> : <Menu className="h-4 w-4" aria-hidden="true" />}
+                </button>
                 <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full border border-rose-200 bg-rose-50 text-[#800020]">
                   <img src={campusCareLogo} alt="" aria-hidden="true" className="h-full w-full rounded-full object-contain" />
                 </span>
@@ -855,22 +937,34 @@ export default function GrievanceQueue({ user = {}, onLogout }) {
             
             {/* 1. GRIEVANCE QUEUE */}
             {activeNav === 'Grievance Queue' && (
-              <div>
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-                  <div>
-                    <h2 className="text-xl sm:text-2xl font-bold text-slate-900 leading-tight">Grievance Queue</h2>
-                    <p className="text-xs text-slate-500 mt-0.5">Manage, review, and dispatch incoming student grievance cases.</p>
-                  </div>
+              <section className="overflow-hidden rounded-[30px] border border-slate-200 bg-white shadow-[0_18px_45px_rgba(15,23,42,0.08)]">
+                <div className="border-b border-rose-100 bg-gradient-to-r from-[#fff5f7] via-white to-[#fffaf7] p-5 sm:p-7">
+                  <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+                    <div>
+                      <div className="mb-2 flex items-center gap-2">
+                        <span className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.18em] text-[#800020]">
+                          <span className="h-1.5 w-1.5 rounded-full bg-[#800020]" />
+                          Live queue
+                        </span>
+                      </div>
+                      <h2 className="text-xl sm:text-2xl font-extrabold text-slate-900 leading-tight">Grievance Queue</h2>
+                      <p className="mt-1 text-xs text-slate-500">Manage, review, and dispatch incoming student grievance cases.</p>
+                    </div>
 
-                  <div className="flex items-center gap-2 border border-slate-200 rounded-xl px-3 py-1.5 text-xs text-slate-600 bg-white shadow-2xs self-start sm:self-auto">
-                    <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                    <span>AY 2025-2026</span>
-                    <span className="text-slate-400 uppercase text-[9px] font-bold">TERM 1</span>
+                    <div className="flex items-center gap-3 self-start rounded-2xl border border-slate-200 bg-white/80 px-3 py-2 text-xs text-slate-600 shadow-sm xl:self-auto">
+                      <span className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-500">
+                        <Calendar className="w-3.5 h-3.5" />
+                      </span>
+                      <div className="leading-tight">
+                        <div className="font-semibold text-slate-700">AY 2025-2026</div>
+                        <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Term 1</div>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
                 {/* Filter Tabs */}
-                <div className="flex items-center gap-4 sm:gap-6 border-b border-slate-200 mb-6 overflow-x-auto pb-px">
+                <div className="flex items-center gap-4 overflow-x-auto border-b border-slate-200 bg-white px-5 pt-4 sm:gap-6 sm:px-7">
                   {tabs.map((tab) => {
                     const isActive = activeTab === tab.label;
                     return (
@@ -896,169 +990,236 @@ export default function GrievanceQueue({ user = {}, onLogout }) {
                 </div>
 
                 {/* Queue Table */}
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs border-separate border-spacing-y-1.5 min-w-[760px]">
-                    <thead>
-                      <tr className="text-slate-400 font-semibold uppercase tracking-wider text-[10px]">
-                        <th className="py-2.5 px-3">Id ▼</th>
-                        <th className="py-2.5 px-3">Filer Info</th>
-                        <th className="py-2.5 px-3">Category</th>
-                        <th className="py-2.5 px-3">SLA Time Remaining ▼</th>
-                        <th className="py-2.5 px-3">Assigned Desk</th>
-                        <th className="py-2.5 px-3">Status</th>
-                        <th className="py-2.5 px-3">Type</th>
-                        <th className="py-2.5 px-3 text-right">Action</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredCases.length === 0 ? (
-                        <tr>
-                          <td colSpan="8" className="py-12 text-center text-slate-400 bg-slate-50/50 rounded-xl">
-                            {casesLoading
-                              ? 'Loading complaints…'
-                              : casesError || 'No complaints found. Submitted complaints will appear here.'}
-                          </td>
-                        </tr>
-                      ) : (
-                        filteredCases.map((item) => (
-                          <tr
-                            key={item.id}
-                            tabIndex={0}
-                            aria-label={`View complaint ${item.id}: ${item.type}`}
-                            onClick={(event) => {
-                              if (event.target.closest('button, a, input, select, textarea')) return;
-                              openCaseDetails(item);
-                            }}
-                            onKeyDown={(event) => {
-                              if (
-                                event.target === event.currentTarget
-                                && (event.key === 'Enter' || event.key === ' ')
-                              ) {
-                                event.preventDefault();
-                                openCaseDetails(item);
-                              }
-                            }}
-                            className={`cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#800020] hover:bg-slate-50/90 transition-colors rounded-xl relative border border-slate-100 ${
-                              item.slaStatus === 'urgent' ? 'bg-rose-50/30' : 'bg-white'
-                            }`}
-                          >
-                            <td className="py-3 px-3 font-bold text-slate-800 font-mono text-xs">{item.id}</td>
-                            <td className="py-3 px-3">
-                              <div className="flex items-center gap-2.5">
-                                <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${item.avatarBg}`}>
-                                  {item.avatar}
-                                </div>
-                                <div>
-                                  <span className="font-semibold text-slate-700 block leading-tight">{item.filer}</span>
-                                  <span className="text-[10px] text-slate-400">{item.studentId}</span>
-                                </div>
-                              </div>
-                            </td>
-                            <td className="py-3 px-3 text-slate-500 font-medium">{item.category}</td>
-                            <td className="py-3 px-3">
-                              <div className="flex items-center gap-1.5 font-medium">
-                                {item.slaStatus === 'resolved' ? (
-                                  <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-                                ) : (
-                                  <Clock className={`w-4 h-4 shrink-0 ${item.slaStatus === 'urgent' ? 'text-rose-500' : 'text-slate-400'}`} />
-                                )}
-                                <span className={
-                                  item.slaStatus === 'urgent' ? 'text-rose-600 font-bold' : item.slaStatus === 'resolved' ? 'text-emerald-600 font-semibold' : 'text-slate-600'
-                                }>
-                                  {item.sla}
-                                </span>
-                              </div>
-                            </td>
-                            <td className="py-3 px-3">
-                              <span className={`font-semibold ${item.slaStatus === 'urgent' ? 'text-slate-700' : 'text-[#800020]'}`}>
-                                {item.assignedDesk}
-                              </span>
-                            </td>
-                            <td className="py-3 px-3">
-                              <div className="inline-flex items-center gap-1.5 font-semibold px-2.5 py-1 rounded-full text-[11px] bg-slate-50 border border-slate-100">
-                                <span className={`w-1.5 h-1.5 rounded-full ${item.dotColor}`}></span>
-                                <span className={item.statusColor.split(' ')[0]}>{item.status}</span>
-                              </div>
-                            </td>
-                            <td className="py-3 px-3">
-                              <button
-                                type="button"
-                                onClick={() => openCaseDetails(item)}
-                                className="text-left font-medium text-slate-600 underline decoration-slate-300 underline-offset-2 transition-colors hover:text-[#800020] hover:decoration-[#800020]"
-                                aria-label={`View details for ${item.id}: ${item.type}`}
-                              >
-                                {item.type}
-                              </button>
-                            </td>
-                            <td className="py-3 px-3 text-right relative">
-                              <button
-                                type="button"
-                                onClick={() => setOpenMenuId(openMenuId === item.id ? null : item.id)}
-                                className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
-                                aria-label="Actions"
-                              >
-                                <MoreVertical className="w-4 h-4" />
-                              </button>
+                <div className="mx-3 mb-3 mt-4 overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-sm sm:mx-5 sm:mb-5" data-scroll-reveal>
+                  <div className="flex flex-col gap-4 border-b border-slate-200 bg-gradient-to-r from-[#fff7f9] via-white to-white p-4 sm:p-5">
+                    <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+                      <div className="flex w-full max-w-md items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
+                        <Search className="h-4 w-4 text-slate-400" />
+                        <input
+                          type="text"
+                          value={searchQuery}
+                          onChange={(event) => setSearchQuery(event.target.value)}
+                          placeholder="Search student, ID, category…"
+                          className="w-full border-0 bg-transparent text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none"
+                        />
+                      </div>
 
-                              {openMenuId === item.id && (
-                                <div className="absolute right-3 top-10 w-36 bg-white rounded-2xl shadow-xl border border-slate-100 p-1.5 z-30 text-left space-y-1 animate-in fade-in zoom-in-95 duration-100">
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      openCaseDetails(item);
-                                      setOpenMenuId(null);
-                                    }}
-                                    className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-50 rounded-lg font-medium transition-colors cursor-pointer"
-                                  >
-                                    <FileText className="w-3.5 h-3.5 text-slate-400" />
-                                    <span>View details</span>
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleMessageFiler(item)}
-                                    className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-[#800020] hover:bg-rose-50 rounded-lg font-medium transition-colors cursor-pointer"
-                                  >
-                                    <MessageCircle className="w-3.5 h-3.5" />
-                                    <span>Message</span>
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleReassignCase(item.id)}
-                                    className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-50 rounded-lg font-medium transition-colors cursor-pointer"
-                                  >
-                                    <UserPlus className="w-3.5 h-3.5 text-slate-400" />
-                                    <span>Reassign</span>
-                                  </button>
-                                  {item.status === 'Under Review' && (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleUpdateComplaintStatus(item.id, 'In Progress')}
-                                      className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-blue-600 hover:bg-blue-50 rounded-lg font-medium transition-colors cursor-pointer"
-                                    >
-                                      <Clock className="w-3.5 h-3.5" />
-                                      <span>Mark In Progress</span>
-                                    </button>
-                                  )}
-                                  {!['Resolved', 'Withdrawn'].includes(item.status) && (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleResolveCase(item.id)}
-                                      className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-emerald-600 hover:bg-emerald-50 rounded-lg font-medium transition-colors cursor-pointer"
-                                    >
-                                      <Check className="w-3.5 h-3.5" />
-                                      <span>Resolve</span>
-                                    </button>
-                                  )}
-                                </div>
-                              )}
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-[#800020]">
+                          {cases.filter((caseItem) => !['Resolved', 'Rejected', 'Withdrawn', 'Closed'].includes(caseItem.status)).length} active
+                        </span>
+                        <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-semibold text-slate-600">
+                          {cases.filter((caseItem) => caseItem.slaStatus === 'urgent').length} urgent SLA
+                        </span>
+                        <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold text-emerald-700">
+                          {cases.filter((caseItem) => ['Resolved', 'Closed'].includes(caseItem.status)).length} resolved / closed
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                      <div className="rounded-2xl border border-slate-200 bg-white p-3" data-scroll-reveal data-interactive-card>
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">Open cases</p>
+                        <p className="mt-2 text-2xl font-extrabold text-slate-900">{cases.filter((caseItem) => !['Resolved', 'Rejected', 'Withdrawn', 'Closed'].includes(caseItem.status)).length}</p>
+                      </div>
+                      <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3" data-scroll-reveal data-interactive-card>
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-600">Awaiting review</p>
+                        <p className="mt-2 text-2xl font-extrabold text-amber-700">{cases.filter((caseItem) => caseItem.status === 'Under Review').length}</p>
+                      </div>
+                      <div className="rounded-2xl border border-blue-200 bg-blue-50 p-3" data-scroll-reveal data-interactive-card>
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-blue-600">In progress</p>
+                        <p className="mt-2 text-2xl font-extrabold text-blue-700">{cases.filter((caseItem) => caseItem.status === 'In Progress').length}</p>
+                      </div>
+                      <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-3" data-scroll-reveal data-interactive-card>
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-600">Resolved</p>
+                        <p className="mt-2 text-2xl font-extrabold text-emerald-700">{cases.filter((caseItem) => caseItem.status === 'Resolved').length}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[760px] border-separate border-spacing-y-2 p-3 text-left text-xs">
+                      <thead>
+                        <tr className="text-slate-400 font-semibold uppercase tracking-[0.14em] text-[10px]">
+                          <th className="px-3 py-2">Id</th>
+                          <th className="px-3 py-2">Filer Info</th>
+                          <th className="px-3 py-2">Category</th>
+                          <th className="px-3 py-2">SLA Time Remaining</th>
+                          <th className="px-3 py-2">Assigned Desk</th>
+                          <th className="px-3 py-2">Status</th>
+                          <th className="px-3 py-2">Type</th>
+                          <th className="px-3 py-2 text-right">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredCases.length === 0 ? (
+                          <tr>
+                            <td colSpan="8" className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-12 text-center text-slate-400">
+                              {casesLoading
+                                ? 'Loading complaints…'
+                                : casesError || 'No complaints found. Submitted complaints will appear here.'}
                             </td>
                           </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
+                        ) : (
+                          filteredCases.map((item) => (
+                            <tr
+                              key={item.id}
+                              tabIndex={0}
+                              aria-label={`View complaint ${item.id}: ${item.type}`}
+                              onClick={(event) => {
+                                if (event.target.closest('button, a, input, select, textarea')) return;
+                                openCaseDetails(item);
+                              }}
+                              onKeyDown={(event) => {
+                                if (
+                                  event.target === event.currentTarget
+                                  && (event.key === 'Enter' || event.key === ' ')
+                                ) {
+                                  event.preventDefault();
+                                  openCaseDetails(item);
+                                }
+                              }}
+                              className={`group cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#800020] focus-visible:ring-offset-2 transition-all rounded-2xl border ${
+                                item.slaStatus === 'urgent'
+                                  ? 'border-rose-200 bg-gradient-to-r from-rose-50/90 to-white shadow-sm'
+                                  : 'border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm'
+                              }`}
+                            >
+                              <td className="rounded-l-2xl px-3 py-3 font-bold text-slate-800 font-mono text-xs">{item.id}</td>
+                              <td className="px-3 py-3">
+                                <div className="flex items-center gap-2.5">
+                                  <div className={`flex h-8 w-8 items-center justify-center rounded-full text-[11px] font-bold shrink-0 ${item.avatarBg}`}>
+                                    {item.avatar}
+                                  </div>
+                                  <div>
+                                    <span className="block text-sm font-semibold text-slate-700 leading-tight">{item.filer}</span>
+                                    <span className="text-[10px] text-slate-400">{item.studentId}</span>
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="px-3 py-3 text-slate-600 font-semibold">{item.category}</td>
+                              <td className="px-3 py-3">
+                                <div className="flex items-center gap-1.5 font-medium">
+                                  {item.slaStatus === 'resolved' ? (
+                                    <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                                  ) : (
+                                    <Clock className={`w-4 h-4 shrink-0 ${item.slaStatus === 'urgent' ? 'text-rose-500' : 'text-slate-400'}`} />
+                                  )}
+                                  <span className={
+                                    item.slaStatus === 'urgent'
+                                      ? 'text-rose-600 font-bold'
+                                      : item.slaStatus === 'resolved'
+                                        ? 'text-emerald-600 font-semibold'
+                                        : 'text-slate-600'
+                                  }>
+                                    {item.sla}
+                                  </span>
+                                </div>
+                              </td>
+                              <td className="px-3 py-3">
+                                <span className={`font-semibold ${item.slaStatus === 'urgent' ? 'text-slate-700' : 'text-[#800020]'}`}>
+                                  {item.assignedDesk}
+                                </span>
+                              </td>
+                              <td className="px-3 py-3">
+                                <div className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 font-semibold text-[11px]">
+                                  <span className={`h-1.5 w-1.5 rounded-full ${item.dotColor}`}></span>
+                                  <span className={item.statusColor.split(' ')[0]}>{item.status}</span>
+                                </div>
+                              </td>
+                              <td className="px-3 py-3">
+                                <button
+                                  type="button"
+                                  onClick={() => openCaseDetails(item)}
+                                  className="text-left font-semibold text-slate-600 underline decoration-slate-300 underline-offset-2 transition-colors hover:text-[#800020] hover:decoration-[#800020]"
+                                  aria-label={`View details for ${item.id}: ${item.type}`}
+                                >
+                                  {item.type}
+                                </button>
+                              </td>
+                              <td className="rounded-r-2xl px-3 py-3 text-right relative">
+                                <button
+                                  type="button"
+                                  onClick={() => setOpenMenuId(openMenuId === item.id ? null : item.id)}
+                                  className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                                  aria-label="Actions"
+                                >
+                                  <MoreVertical className="h-4 w-4" />
+                                </button>
+
+                                {openMenuId === item.id && (
+                                  <div className="absolute right-3 top-10 w-36 rounded-2xl border border-slate-200 bg-white p-1.5 text-left shadow-xl z-30 space-y-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        openCaseDetails(item);
+                                        setOpenMenuId(null);
+                                      }}
+                                      className="w-full rounded-lg px-3 py-1.5 text-left text-xs text-slate-600 hover:bg-slate-50"
+                                    >
+                                      <span className="flex items-center gap-2"><FileText className="h-3.5 w-3.5 text-slate-400" />View details</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleMessageFiler(item)}
+                                      className="w-full rounded-lg px-3 py-1.5 text-left text-xs text-[#800020] hover:bg-rose-50"
+                                    >
+                                      <span className="flex items-center gap-2"><MessageCircle className="h-3.5 w-3.5" />Message</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleReassignCase(item.id)}
+                                      className="w-full rounded-lg px-3 py-1.5 text-left text-xs text-slate-600 hover:bg-slate-50"
+                                    >
+                                      <span className="flex items-center gap-2"><UserPlus className="h-3.5 w-3.5 text-slate-400" />Reassign</span>
+                                    </button>
+                                    {item.status === 'Under Review' && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleUpdateComplaintStatus(item.id, 'In Progress')}
+                                        className="w-full rounded-lg px-3 py-1.5 text-left text-xs text-blue-600 hover:bg-blue-50"
+                                      >
+                                        <span className="flex items-center gap-2"><Clock className="h-3.5 w-3.5" />Mark In Progress</span>
+                                      </button>
+                                    )}
+                                    {!['Resolved', 'Rejected', 'Withdrawn', 'Closed'].includes(item.status) && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleResolveCase(item.id)}
+                                        className="w-full rounded-lg px-3 py-1.5 text-left text-xs text-emerald-600 hover:bg-emerald-50"
+                                      >
+                                        <span className="flex items-center gap-2"><Check className="h-3.5 w-3.5" />Resolve</span>
+                                      </button>
+                                    )}
+                                    {item.status === 'Resolved' && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleUpdateComplaintStatus(item.id, 'Closed')}
+                                        className="w-full rounded-lg px-3 py-1.5 text-left text-xs text-slate-600 hover:bg-slate-50"
+                                      >
+                                        <span className="flex items-center gap-2"><Check className="h-3.5 w-3.5" />Close case</span>
+                                      </button>
+                                    )}
+                                    {['Rejected', 'Closed'].includes(item.status) && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleUpdateComplaintStatus(item.id, 'In Progress', 'Complaint reopened for further review.')}
+                                        className="w-full rounded-lg px-3 py-1.5 text-left text-xs text-blue-600 hover:bg-blue-50"
+                                      >
+                                        <span className="flex items-center gap-2"><Clock className="h-3.5 w-3.5" />Reopen complaint</span>
+                                      </button>
+                                    )}
+                                  </div>
+                                )}
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
-              </div>
+              </section>
             )}
 
             {/* 2. LIVE GRIEVANCES */}
@@ -1110,6 +1271,8 @@ export default function GrievanceQueue({ user = {}, onLogout }) {
                       key={dept.name}
                       type="button"
                       onClick={() => handleOpenDepartmentCases(dept.name)}
+                      data-scroll-reveal
+                      data-interactive-card
                       className="w-full bg-white rounded-xl border border-slate-200 p-5 space-y-3 text-left shadow-2xs hover:border-[#800020]/40 hover:shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-[#800020] transition-all"
                       aria-label={`View ${dept.active + dept.resolved} complaint${dept.active + dept.resolved === 1 ? '' : 's'} assigned to ${dept.name}`}
                     >
@@ -1151,7 +1314,7 @@ export default function GrievanceQueue({ user = {}, onLogout }) {
 
             {/* 4. WEB ANALYTICS */}
             {activeNav === 'Web Analytics' && (
-              <div className="space-y-4">
+              <div className="admin-analytics space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <h2 className="text-xl sm:text-2xl font-bold text-slate-800 leading-tight">Complaint Analytics</h2>
@@ -1188,7 +1351,7 @@ export default function GrievanceQueue({ user = {}, onLogout }) {
                       color: 'blue',
                       Icon: Users,
                     }
-                  ].map(({ label, value, color, Icon }) => {
+                  ].map(({ label, value, color, Icon }, index) => {
                     const colors = {
                       blue: 'bg-sky-50 border-sky-100 text-sky-600',
                       rose: 'bg-rose-50 border-rose-100 text-rose-700',
@@ -1196,7 +1359,11 @@ export default function GrievanceQueue({ user = {}, onLogout }) {
                       amber: 'bg-amber-50 border-amber-100 text-amber-600'
                     };
                     return (
-                      <article key={label} className={`min-w-0 rounded-xl border p-3.5 sm:p-4 ${colors[color]}`}>
+                      <article
+                        key={`${label}-${analyticsRange}-${value}`}
+                        className={`admin-analytics__metric min-w-0 rounded-xl border p-3.5 sm:p-4 ${colors[color]}`}
+                        style={{ '--analytics-stagger': `${index * 65}ms` }}
+                      >
                         <div className="flex items-center gap-2.5">
                           <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/80">
                             <Icon className="h-4 w-4" aria-hidden="true" />
@@ -1232,7 +1399,13 @@ export default function GrievanceQueue({ user = {}, onLogout }) {
                         ))}
                       </div>
                     </div>
-                    <svg viewBox="0 0 600 220" className="h-48 w-full" role="img" aria-label={`${analyticsGranularity} complaint submission trend`}>
+                    <svg
+                      key={`${analyticsRange}-${analyticsGranularity}`}
+                      viewBox="0 0 600 220"
+                      className="h-48 w-full"
+                      role="img"
+                      aria-label={`${analyticsGranularity} complaint submission trend`}
+                    >
                       {[0, 1, 2, 3, 4].map((step) => {
                         const tick = Math.round((trendMaximum * step) / 4);
                         const y = 178 - (step / 4) * 150;
@@ -1243,10 +1416,29 @@ export default function GrievanceQueue({ user = {}, onLogout }) {
                           </g>
                         );
                       })}
-                      <polygon points={trendArea} fill="#b5264a" opacity="0.08" />
-                      <polyline points={trendLine} fill="none" stroke="#b5264a" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                      <polygon className="admin-analytics__trend-area" points={trendArea} fill="#b5264a" opacity="0.08" />
+                      <polyline
+                        className="admin-analytics__trend-line"
+                        points={trendLine}
+                        pathLength="1"
+                        fill="none"
+                        stroke="#b5264a"
+                        strokeWidth="3"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
                       {trendPoints.map(({ x, y }, index) => (
-                        <circle key={`${x}-${index}`} cx={x} cy={y} r="3.5" fill="white" stroke="#b5264a" strokeWidth="2" />
+                        <circle
+                          key={`${x}-${index}`}
+                          className="admin-analytics__trend-point"
+                          style={{ '--analytics-stagger': `${Math.min(index * 12, 240)}ms` }}
+                          cx={x}
+                          cy={y}
+                          r="3.5"
+                          fill="white"
+                          stroke="#b5264a"
+                          strokeWidth="2"
+                        />
                       ))}
                       {trendLabels.map((label, index) => {
                         const bucketIndex = trendLabelIndexes[index];
@@ -1258,19 +1450,26 @@ export default function GrievanceQueue({ user = {}, onLogout }) {
 
                   <section className="rounded-xl border border-slate-200 bg-white p-4 xl:col-span-3" aria-labelledby="category-analytics-title">
                     <h3 id="category-analytics-title" className="mb-4 text-sm font-bold text-slate-800">By Category</h3>
-                    <div className="space-y-3.5">
-                      {categoryStats.map((item) => {
+                    <div className="space-y-3.5" key={analyticsRange}>
+                      {categoryStats.map((item, index) => {
                         const percent = analyticsCases.length
                           ? Math.round((item.count / analyticsCases.length) * 100)
                           : 0;
                         return (
-                        <div key={item.name}>
+                        <div
+                          key={item.name}
+                          className="admin-analytics__category"
+                          style={{ '--analytics-stagger': `${Math.min(index * 55, 330)}ms` }}
+                        >
                           <div className="mb-1 flex items-center justify-between text-[11px]">
                             <span className="font-medium text-slate-700">{item.name}</span>
                             <span className="text-slate-500">{item.count} ({percent}%)</span>
                           </div>
                           <div className="h-2.5 overflow-hidden rounded-full bg-slate-100">
-                            <div className="h-full rounded-full bg-[#b5264a]" style={{ width: `${percent}%` }} />
+                            <div
+                              className="admin-analytics__category-bar h-full rounded-full bg-[#b5264a]"
+                              style={{ width: `${percent}%`, '--analytics-stagger': `${Math.min(index * 55, 330)}ms` }}
+                            />
                           </div>
                         </div>
                         );
@@ -1281,9 +1480,13 @@ export default function GrievanceQueue({ user = {}, onLogout }) {
 
                   <section className="rounded-xl border border-slate-200 bg-white p-4 xl:col-span-4" aria-labelledby="desk-analytics-title">
                     <h3 id="desk-analytics-title" className="mb-2 text-sm font-bold text-slate-800">By Assigned Desk</h3>
-                    <div className="divide-y divide-slate-100">
-                      {analyticsDepartmentStats.map((department) => (
-                        <div key={department.name} className="flex items-center gap-2.5 py-2.5 first:pt-1 last:pb-1">
+                    <div className="divide-y divide-slate-100" key={analyticsRange}>
+                      {analyticsDepartmentStats.map((department, index) => (
+                        <div
+                          key={department.name}
+                          className="admin-analytics__department flex items-center gap-2.5 py-2.5 first:pt-1 last:pb-1"
+                          style={{ '--analytics-stagger': `${Math.min(index * 45, 270)}ms` }}
+                        >
                           <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-50 text-slate-400">
                             <Building2 className="h-3.5 w-3.5" aria-hidden="true" />
                           </span>
@@ -1620,7 +1823,7 @@ export default function GrievanceQueue({ user = {}, onLogout }) {
       )}
       {selectedCase && (
         <div
-          className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/50 p-4"
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/65 p-2 sm:p-4"
           onMouseDown={(event) => {
             if (event.target === event.currentTarget) setSelectedCase(null);
           }}
@@ -1629,164 +1832,368 @@ export default function GrievanceQueue({ user = {}, onLogout }) {
             role="dialog"
             aria-modal="true"
             aria-labelledby="complaint-details-title"
-            className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl sm:p-7"
+            className="relative flex max-h-[94dvh] w-full max-w-[1360px] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-[#f3f5f7] shadow-[0_30px_80px_rgba(15,23,42,0.35)] sm:rounded-[26px]"
           >
-            <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-4">
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-wider text-[#800020]">Filed complaint · {selectedCase.grievanceId}</p>
-                <h2 id="complaint-details-title" className="mt-1 text-xl font-bold text-slate-900">{selectedCase.type}</h2>
-                <p className="mt-1 text-xs text-slate-500">{selectedCase.category}</p>
-              </div>
-              <button
-                type="button"
-                autoFocus
-                onClick={() => setSelectedCase(null)}
-                className="rounded-lg px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100"
-              >
-                Close
-              </button>
-            </div>
-
-            <dl className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div>
-                <dt className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Filed by</dt>
-                <dd className="mt-1 text-sm font-semibold text-slate-800">{selectedCase.filer}</dd>
-                <dd className="text-xs text-slate-500">{selectedCase.studentId} · {selectedCase.recipientEmail}</dd>
-              </div>
-              <div>
-                <dt className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Submitted</dt>
-                <dd className="mt-1 text-sm text-slate-700">
-                  {selectedCase.submittedAt
-                    ? new Date(selectedCase.submittedAt).toLocaleString()
-                    : 'Date unavailable'}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Status</dt>
-                <dd className="mt-1 text-sm font-semibold text-slate-700">{selectedCase.status}</dd>
-              </div>
-              <div>
-                <dt className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Assigned desk</dt>
-                <dd className="mt-1 text-sm text-slate-700">{selectedCase.assignedDesk}</dd>
-              </div>
-              <div className="sm:col-span-2">
-                <dt className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Location</dt>
-                <dd className="mt-1 text-sm text-slate-700">{selectedCase.location || 'Not provided'}</dd>
-              </div>
-              <div className="sm:col-span-2">
-                <dt className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Complaint details</dt>
-                <dd className="mt-1 whitespace-pre-wrap break-words rounded-xl bg-slate-50 p-4 text-sm leading-relaxed text-slate-700">
-                  {selectedCase.description || 'No details provided.'}
-                </dd>
-              </div>
-              {selectedCase.attachment?.data && (
-                <div className="sm:col-span-2">
-                  <dt className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Attached image</dt>
-                  <dd className="mt-2">
-                    <a
-                      href={selectedCase.attachment.data}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex max-h-80 max-w-full overflow-hidden rounded-xl border border-slate-200"
-                    >
-                      <img
-                        src={selectedCase.attachment.data}
-                        alt={selectedCase.attachment.name || 'Complaint attachment'}
-                        className="max-h-80 max-w-full object-contain"
-                      />
-                    </a>
-                    <p className="mt-1 text-xs text-slate-500">{selectedCase.attachment.name || 'Complaint attachment'}</p>
-                  </dd>
+            <header className="flex shrink-0 items-center justify-between border-b border-slate-200/80 bg-white px-4 py-3 sm:px-7 sm:py-4">
+              <div className="flex items-center gap-3">
+                <div className="text-[10px] font-extrabold uppercase tracking-[0.2em] text-slate-800">
+                  CampusCare<br />Admin Portal
                 </div>
-              )}
-            </dl>
-            <section className="mt-6 border-t border-slate-100 pt-5">
-              <h3 className="text-sm font-bold text-slate-900">Responses &amp; activity</h3>
-              <p className="mt-1 text-xs text-slate-500">
-                Status changes, office responses, and resolution notes are saved to this case history.
-              </p>
-              <ol className="mt-4 max-h-64 space-y-3 overflow-y-auto">
-                {complaintActivity.complaintId !== selectedCase.grievanceId ? (
-                  <li className="text-xs text-slate-500">Loading complaint activity…</li>
-                ) : complaintActivity.error ? (
-                  <li role="alert" className="text-xs text-rose-700">{complaintActivity.error}</li>
-                ) : complaintActivity.activity.length ? (
-                  complaintActivity.activity.map((activity) => (
-                    <li key={activity.id} className="rounded-xl bg-slate-50 p-3">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <span className="text-xs font-semibold capitalize text-slate-800">
-                          {activity.type === 'resolution' ? 'Resolution note' : activity.type}
-                          {' · '}{activity.actor}
-                        </span>
-                        <time className="text-[10px] text-slate-500" dateTime={activity.createdAt}>
-                          {new Date(activity.createdAt).toLocaleString()}
-                        </time>
-                      </div>
-                      <p className="mt-1 whitespace-pre-wrap break-words text-xs leading-relaxed text-slate-700">
-                        {activity.message}
-                      </p>
-                    </li>
-                  ))
-                ) : (
-                  <li className="text-xs text-slate-500">No activity has been recorded yet.</li>
-                )}
-              </ol>
-              {selectedCase.status !== 'Withdrawn' && (
-                <div className="mt-4 space-y-3">
-                  <label className="block text-xs font-semibold text-slate-700" htmlFor="complaint-response">
-                    Add a response for the student
-                    <textarea
-                      id="complaint-response"
-                      value={responseMessage}
-                      onChange={(event) => setResponseMessage(event.target.value)}
-                      maxLength={3000}
-                      rows={3}
-                      placeholder="Write an update or response about this complaint…"
-                      className="mt-1 w-full resize-y rounded-xl border border-slate-200 p-3 text-sm font-normal text-slate-800 focus:border-[#800020] focus:outline-none focus:ring-2 focus:ring-[#800020]/15"
-                    />
-                    <span className="mt-1 block text-right text-[10px] font-normal text-slate-500">
-                      {responseMessage.length}/3000
-                    </span>
-                  </label>
+              </div>
+
+              <div className="flex items-center gap-2 sm:gap-3">
+                <div className="hidden text-right sm:block">
+                  <p className="text-xs font-semibold text-slate-800">{adminName}</p>
+                  <p className="text-[10px] text-slate-500">Administrator</p>
+                </div>
+                <div className="grid h-9 w-9 place-items-center rounded-full bg-[#f8e4d4] text-[10px] font-bold text-[#6b3f20]">
+                  {adminInitials || 'AD'}
+                </div>
+                <button
+                  type="button"
+                  autoFocus
+                  aria-label="Close complaint details"
+                  onClick={() => setSelectedCase(null)}
+                  className="grid h-9 w-9 place-items-center rounded-xl border border-slate-200 bg-white text-slate-600 transition-colors hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#800020]"
+                >
+                  <span aria-hidden="true" className="text-lg leading-none">×</span>
+                </button>
+              </div>
+            </header>
+
+            <div className="min-h-0 overflow-y-auto px-3 pb-4 pt-3 sm:px-7 sm:pb-7 sm:pt-4">
+              <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-500 shadow-sm sm:flex-nowrap">
+                <button
+                  type="button"
+                  onClick={() => setSelectedCase(null)}
+                  className="inline-flex items-center gap-2 rounded-lg px-2 py-1 text-slate-600 transition-colors hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#800020]"
+                >
+                  <span aria-hidden="true">←</span>
+                  <span>Grievance Queue</span>
+                </button>
+                <span className="text-slate-300">›</span>
+                <span className="min-w-0 truncate font-semibold text-slate-700">{selectedCase.grievanceId}</span>
+
+                <div className="ml-auto flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-1.5 py-1 text-[11px] text-slate-600">
                   <button
                     type="button"
-                    disabled={activitySaving || !responseMessage.trim()}
-                    onClick={handleSendComplaintResponse}
-                    className="rounded-lg bg-[#800020] px-3 py-2 text-xs font-semibold text-white hover:bg-[#66001a] disabled:cursor-not-allowed disabled:opacity-50"
+                    aria-label="Previous complaint"
+                    disabled={selectedCaseIndex <= 0}
+                    onClick={() => {
+                      if (selectedCaseIndex > 0) openCaseDetails(cases[selectedCaseIndex - 1]);
+                    }}
+                    className="grid h-7 w-7 place-items-center rounded-md bg-white transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
                   >
-                    {activitySaving ? 'Saving…' : 'Add response'}
+                    <span aria-hidden="true">←</span>
                   </button>
-                  {!['Resolved', 'Withdrawn'].includes(selectedCase.status) && (
-                    <label className="block text-xs font-semibold text-slate-700" htmlFor="complaint-resolution-note">
-                      Resolution note (required to resolve)
-                      <textarea
-                        id="complaint-resolution-note"
-                        value={resolutionNote}
-                        onChange={(event) => setResolutionNote(event.target.value)}
-                        maxLength={3000}
-                        rows={3}
-                        placeholder="Describe the action taken and outcome…"
-                        className="mt-1 w-full resize-y rounded-xl border border-slate-200 p-3 text-sm font-normal text-slate-800 focus:border-[#800020] focus:outline-none focus:ring-2 focus:ring-[#800020]/15"
-                      />
-                      <span className="mt-1 block text-right text-[10px] font-normal text-slate-500">
-                        {resolutionNote.length}/3000
-                      </span>
-                    </label>
-                  )}
-                  {!['Resolved', 'Withdrawn'].includes(selectedCase.status) && (
-                    <button
-                      type="button"
-                      disabled={activitySaving || !resolutionNote.trim()}
-                      onClick={() => handleUpdateComplaintStatus(selectedCase.id, 'Resolved', resolutionNote)}
-                      className="ml-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      Resolve with note
-                    </button>
-                  )}
-                  {activityError && <p role="alert" className="text-xs text-rose-700">{activityError}</p>}
+                  <span className="min-w-[4rem] px-1 text-center font-medium">
+                    {selectedCaseIndex >= 0 ? `${selectedCaseIndex + 1} of ${cases.length}` : `— of ${cases.length}`}
+                  </span>
+                  <button
+                    type="button"
+                    aria-label="Next complaint"
+                    disabled={selectedCaseIndex < 0 || selectedCaseIndex >= cases.length - 1}
+                    onClick={() => {
+                      if (selectedCaseIndex >= 0 && selectedCaseIndex < cases.length - 1) {
+                        openCaseDetails(cases[selectedCaseIndex + 1]);
+                      }
+                    }}
+                    className="grid h-7 w-7 place-items-center rounded-md bg-white transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    <span aria-hidden="true">→</span>
+                  </button>
                 </div>
-              )}
-            </section>
+              </div>
+
+              <div className="rounded-[20px] border border-slate-200 bg-white p-4 shadow-sm sm:p-6 lg:p-7">
+                <div className="flex flex-col gap-4 border-b border-slate-200 pb-4 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0">
+                    <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                      Complaint · {selectedCase.grievanceId}
+                    </p>
+                    <h2 id="complaint-details-title" className="text-[clamp(1.4rem,2vw,2.2rem)] font-extrabold tracking-[-0.03em] text-slate-900">
+                      {selectedCase.type}
+                    </h2>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                    <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-600">
+                      Submitted {selectedCaseSubmittedAt && !Number.isNaN(selectedCaseSubmittedAt.getTime())
+                        ? selectedCaseSubmittedAt.toLocaleString()
+                        : 'date unavailable'}
+                    </span>
+                    {selectedCase.status === 'Under Review' && (
+                      <button
+                        type="button"
+                        onClick={() => handleUpdateComplaintStatus(selectedCase.id, 'In Progress')}
+                        className="rounded-full bg-[#800020] px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#66001a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#800020] focus-visible:ring-offset-2"
+                      >
+                        Mark in progress
+                      </button>
+                    )}
+                    {!['Resolved', 'Withdrawn'].includes(selectedCase.status) && (
+                      <button
+                        type="button"
+                        onClick={showResolutionNote}
+                        className="rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 text-xs font-semibold text-emerald-800 transition-colors hover:bg-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-700 focus-visible:ring-offset-2"
+                      >
+                        Resolve with note
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="mt-5 border-b border-slate-200 pb-4">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <span className={`inline-flex items-center rounded-full px-3 py-1.5 text-[11px] font-bold ${
+                      selectedCase.status === 'Resolved'
+                        ? 'bg-emerald-100 text-emerald-800'
+                        : selectedCase.status === 'Rejected'
+                          ? 'bg-rose-100 text-rose-800'
+                        : selectedCase.status === 'Need More Information'
+                          ? 'bg-violet-100 text-violet-800'
+                        : selectedCase.status === 'Withdrawn'
+                          ? 'bg-slate-100 text-slate-700'
+                        : selectedCase.status === 'Closed'
+                          ? 'bg-slate-100 text-slate-700'
+                          : selectedCase.status === 'In Progress'
+                            ? 'bg-blue-100 text-blue-800'
+                            : 'bg-amber-100 text-amber-800'
+                    }`}>
+                      {selectedCase.status}
+                    </span>
+                    <span className="text-right text-[11px] text-slate-500">
+                      {selectedCase.status === 'Withdrawn'
+                        ? 'This complaint was withdrawn.'
+                        : 'Case progress'}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3" aria-label={`Complaint status: ${selectedCase.status}`}>
+                    {selectedCaseTimeline.map((step, index) => (
+                      <span
+                        key={step}
+                        className={`h-1.5 rounded-full transition-colors ${
+                          index <= selectedCaseProgressIndex ? 'bg-[#1f7af2]' : 'bg-slate-200'
+                        }`}
+                      />
+                    ))}
+                  </div>
+
+                  <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-[11px] text-slate-600 sm:grid-cols-4">
+                    {selectedCaseTimeline.map((step, index) => (
+                      <span key={step} className="inline-flex min-w-0 items-center gap-1.5">
+                        <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${
+                          index <= selectedCaseProgressIndex ? 'bg-[#1f7af2]' : 'bg-slate-300'
+                        }`} />
+                        <span className="truncate">{step}</span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="mt-5 grid gap-6 lg:grid-cols-[minmax(260px,0.78fr)_minmax(0,1.45fr)] lg:gap-8">
+                  <aside className="min-w-0 lg:border-r lg:border-slate-200 lg:pr-7">
+                    <h3 className="mb-2 text-sm font-bold text-slate-900">Filer &amp; case details</h3>
+                    <dl className="divide-y divide-slate-200">
+                      {[
+                        ['Student', selectedCase.filer || 'Not provided'],
+                        ['Student ID', selectedCase.studentId || 'Not provided'],
+                        ['Email', selectedCase.recipientEmail || 'Not provided'],
+                        ['Category', selectedCase.category || 'Not specified'],
+                        ['Assigned desk', selectedCase.assignedDesk || 'Awaiting assignment'],
+                        ['Location', selectedCase.location || 'Not provided'],
+                      ].map(([label, value]) => (
+                        <div key={label} className="grid grid-cols-[minmax(92px,0.7fr)_minmax(0,1.3fr)] gap-3 py-3 text-sm">
+                          <dt className="text-slate-500">{label}</dt>
+                          <dd className="break-words font-semibold text-slate-700">{value}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </aside>
+
+                  <div className="min-w-0">
+                    <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                      <h3 className="text-sm font-bold text-slate-900">Complaint description</h3>
+                      <span className="rounded-full bg-rose-50 px-2.5 py-1 text-[10px] font-semibold text-[#800020]">
+                        {selectedCase.category || 'General concern'}
+                      </span>
+                    </div>
+
+                    <p className="whitespace-pre-wrap break-words rounded-xl bg-slate-50 p-4 text-sm leading-7 text-slate-700">
+                      {selectedCase.description || 'No description was provided.'}
+                    </p>
+
+                    <div className="mt-6">
+                      <div className="mb-3 flex items-center justify-between gap-3">
+                        <h4 className="text-sm font-bold text-slate-900">Attachments</h4>
+                        {selectedCase.attachment?.name && (
+                          <span className="text-[11px] text-slate-500">1 file</span>
+                        )}
+                      </div>
+
+                      <div className="flex flex-wrap gap-3">
+                        {selectedCase.attachment?.data ? (
+                          <a
+                            href={selectedCase.attachment.data}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="flex w-full max-w-sm items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 transition-colors hover:border-rose-300 hover:bg-rose-50/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#800020]"
+                          >
+                            <div className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-rose-50 text-[#800020]">
+                              <FileText className="h-5 w-5" />
+                            </div>
+                            <span className="min-w-0">
+                              <span className="block truncate text-xs font-semibold text-slate-800">{selectedCase.attachment.name || 'Complaint attachment'}</span>
+                              <span className="mt-1 block text-[10px] text-slate-500">Open attachment</span>
+                            </span>
+                          </a>
+                        ) : (
+                          <p className="text-xs text-slate-500">No attachment was submitted with this complaint.</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <section className="mt-8 border-t border-slate-200 pt-6" aria-labelledby="complaint-activity-title">
+                  <h3 id="complaint-activity-title" className="text-base font-bold text-slate-900">Responses &amp; activity</h3>
+                  <ol className="mt-4 space-y-3">
+                    {complaintActivity.complaintId !== selectedCase.grievanceId ? (
+                      <li className="text-xs text-slate-500">Loading complaint activity…</li>
+                    ) : complaintActivity.error ? (
+                      <li role="alert" className="text-xs text-rose-700">{complaintActivity.error}</li>
+                    ) : complaintActivity.activity.length ? (
+                      complaintActivity.activity.map((activity) => (
+                        <li key={activity.id} className="rounded-xl bg-white p-3 ring-1 ring-slate-200">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <span className="text-xs font-semibold capitalize text-slate-800">
+                              {activity.type === 'resolution' ? 'Resolution note' : activity.type}
+                              {' · '}{activity.actor}
+                            </span>
+                            <time className="text-[10px] text-slate-500" dateTime={activity.createdAt}>
+                              {new Date(activity.createdAt).toLocaleString()}
+                            </time>
+                          </div>
+                          <p className="mt-1 whitespace-pre-wrap break-words text-xs leading-relaxed text-slate-700">
+                            {activity.message}
+                          </p>
+                        </li>
+                      ))
+                    ) : (
+                      <li className="text-xs text-slate-500">No activity has been recorded yet.</li>
+                    )}
+                  </ol>
+
+                  {selectedCase.status !== 'Withdrawn' && (
+                    <div className="mt-5 space-y-3">
+                      <label className="block text-xs font-semibold text-slate-700" htmlFor="complaint-response">
+                        Add a response for the student
+                        <textarea
+                          id="complaint-response"
+                          value={responseMessage}
+                          onChange={(event) => setResponseMessage(event.target.value)}
+                          maxLength={3000}
+                          rows={3}
+                          placeholder="Write an update or response about this complaint…"
+                          className="mt-1 w-full resize-y rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-800 focus:border-[#800020] focus:outline-none focus:ring-2 focus:ring-[#800020]/15"
+                        />
+                        <span className="mt-1 block text-right text-[10px] font-normal text-slate-500">{responseMessage.length}/3000</span>
+                      </label>
+
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          disabled={activitySaving || !responseMessage.trim() || ['Rejected', 'Withdrawn', 'Closed'].includes(selectedCase.status)}
+                          onClick={handleSendComplaintResponse}
+                          className="rounded-lg bg-[#800020] px-3 py-2 text-xs font-semibold text-white hover:bg-[#66001a] disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {activitySaving ? 'Saving…' : 'Add response'}
+                        </button>
+                        {!['Resolved', 'Rejected', 'Withdrawn', 'Closed'].includes(selectedCase.status) && (
+                          <button
+                            type="button"
+                            disabled={activitySaving || !resolutionNote.trim()}
+                            onClick={() => handleUpdateComplaintStatus(selectedCase.id, 'Resolved', resolutionNote)}
+                            className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            Resolve complaint
+                          </button>
+                        )}
+                        {selectedCase.status === 'Under Review' && (
+                          <button
+                            type="button"
+                            disabled={activitySaving}
+                            onClick={() => handleUpdateComplaintStatus(selectedCase.id, 'In Progress')}
+                            className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-800 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            Mark in progress
+                          </button>
+                        )}
+                        {!['Resolved', 'Rejected', 'Withdrawn', 'Closed', 'Need More Information'].includes(selectedCase.status) && (
+                          <button
+                            type="button"
+                            disabled={activitySaving || !resolutionNote.trim()}
+                            onClick={() => handleUpdateComplaintStatus(selectedCase.id, 'Need More Information', resolutionNote)}
+                            className="rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-semibold text-violet-800 hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            Request information
+                          </button>
+                        )}
+                        {!['Resolved', 'Rejected', 'Withdrawn', 'Closed'].includes(selectedCase.status) && (
+                          <button
+                            type="button"
+                            disabled={activitySaving || !resolutionNote.trim()}
+                            onClick={() => handleUpdateComplaintStatus(selectedCase.id, 'Rejected', resolutionNote)}
+                            className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-800 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            Reject complaint
+                          </button>
+                        )}
+                        {selectedCase.status === 'Resolved' && (
+                          <button
+                            type="button"
+                            disabled={activitySaving}
+                            onClick={() => handleUpdateComplaintStatus(selectedCase.id, 'Closed')}
+                            className="rounded-lg border border-slate-300 bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            Close case
+                          </button>
+                        )}
+                        {['Rejected', 'Closed'].includes(selectedCase.status) && (
+                          <button
+                            type="button"
+                            disabled={activitySaving}
+                            onClick={() => handleUpdateComplaintStatus(selectedCase.id, 'In Progress', 'Complaint reopened for further review.')}
+                            className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-800 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            Reopen complaint
+                          </button>
+                        )}
+                      </div>
+
+                      {!['Resolved', 'Rejected', 'Withdrawn', 'Closed'].includes(selectedCase.status) && (
+                        <label className="block text-xs font-semibold text-slate-700" htmlFor="complaint-resolution-note">
+                          Administrator note (required to resolve, reject, or request information)
+                          <textarea
+                            id="complaint-resolution-note"
+                            ref={resolutionNoteFieldRef}
+                            value={resolutionNote}
+                            onChange={(event) => setResolutionNote(event.target.value)}
+                            maxLength={3000}
+                            rows={3}
+                            placeholder="Describe the action taken and outcome…"
+                            className="mt-1 w-full resize-y rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-800 focus:border-[#800020] focus:outline-none focus:ring-2 focus:ring-[#800020]/15"
+                          />
+                          <span className="mt-1 block text-right text-[10px] font-normal text-slate-500">{resolutionNote.length}/3000</span>
+                        </label>
+                      )}
+
+                      {activityError && <p role="alert" className="text-xs text-rose-700">{activityError}</p>}
+                    </div>
+                  )}
+                </section>
+              </div>
+            </div>
           </section>
         </div>
       )}

@@ -11,6 +11,7 @@ import Dashboard from './Dashboard.jsx';
 import SubmitGrievance from './SubmitGrievance.jsx';
 import GrievanceQueue from './GrievanceQueue.jsx';
 import { apiRequest } from './apiClient.js';
+import useScrollReveal from './useScrollReveal.js';
 
 const protectedViews = new Set(['dashboard', 'admin', 'submit-grievance']);
 
@@ -71,6 +72,10 @@ export default function App() {
   const [dashboardUser, setDashboardUser] = useState(null);
   const [dashboardTab, setDashboardTab] = useState('Dashboard');
   const [savedGrievanceState, setSavedGrievanceState] = useState({ grievances: [], error: '' });
+  useScrollReveal(
+    `${currentView}:${isAuthLoading ? 'loading' : 'ready'}`,
+    !isAuthLoading && !['dashboard', 'admin'].includes(currentView),
+  );
 
   useEffect(() => {
     try {
@@ -257,6 +262,15 @@ export default function App() {
     return withdrawnGrievance;
   };
 
+  const handleComplaintStatusUpdate = (updatedComplaint) => {
+    setSavedGrievanceState((previousState) => ({
+      grievances: previousState.grievances.map((grievance) => (
+        grievance.id === updatedComplaint.id ? updatedComplaint : grievance
+      )),
+      error: '',
+    }));
+  };
+
   const handleGrievanceSubmitted = () => {
     setDashboardTab('Dashboard');
     setCurrentView('dashboard');
@@ -302,58 +316,69 @@ export default function App() {
 
   if (currentView === 'admin') {
     return (
-      <GrievanceQueue
-        user={dashboardUser}
-        onLogout={handleGoToLogin}
-      />
+      <div className="app-view-transition">
+        <GrievanceQueue
+          user={dashboardUser}
+          onLogout={handleGoToLogin}
+        />
+      </div>
     );
   }
 
   if (currentView === 'landing') {
     return (
-      <CampusCareLanding
-        onLogin={handleLandingLogin}
-      />
+      <div className="app-view-transition">
+        <CampusCareLanding
+          onLogin={handleLandingLogin}
+        />
+      </div>
     );
   }
 
   if (currentView === 'register') {
     return (
-      <Register
-        onBackToLogin={handleGoToLogin}
-      />
+      <div className="app-view-transition">
+        <Register
+          onBackToLogin={handleGoToLogin}
+        />
+      </div>
     );
   }
 
   if (currentView === 'dashboard') {
     return (
-      <Dashboard
-        user={dashboardUser}
-        grievances={savedGrievanceState.grievances}
-        grievanceError={savedGrievanceState.error}
-        onFileGrievance={handleOpenSubmitGrievance}
-        onUpdateGrievance={handleUpdateGrievance}
-        onWithdrawGrievance={handleWithdrawGrievance}
-        onLogout={handleGoToLogin}
-        initialTab={dashboardTab}
-      />
+      <div className="app-view-transition">
+        <Dashboard
+          user={dashboardUser}
+          grievances={savedGrievanceState.grievances}
+          grievanceError={savedGrievanceState.error}
+          onFileGrievance={handleOpenSubmitGrievance}
+          onUpdateGrievance={handleUpdateGrievance}
+          onWithdrawGrievance={handleWithdrawGrievance}
+          onComplaintStatusUpdate={handleComplaintStatusUpdate}
+          onLogout={handleGoToLogin}
+          initialTab={dashboardTab}
+        />
+      </div>
     );
   }
 
   if (currentView === 'submit-grievance') {
     return (
-      <SubmitGrievance
-        user={dashboardUser}
-        onCancel={handleGrievanceSubmitted}
-        onSubmit={handleSaveGrievance}
-        onViewTickets={handleOpenMyGrievances}
-      />
+      <div className="app-view-transition">
+        <SubmitGrievance
+          user={dashboardUser}
+          onCancel={handleGrievanceSubmitted}
+          onSubmit={handleSaveGrievance}
+          onViewTickets={handleOpenMyGrievances}
+        />
+      </div>
     );
   }
 
   return (
-    <div className="min-h-screen w-full bg-[#f3f4f6] flex items-center justify-center p-4 md:p-8 font-sans antialiased">
-      <div className="w-full max-w-[1080px] bg-white rounded-3xl shadow-2xl overflow-hidden grid grid-cols-1 md:grid-cols-12 min-h-[640px] border border-gray-100">
+    <div className="app-view-transition min-h-screen w-full bg-[#f3f4f6] flex items-center justify-center p-4 md:p-8 font-sans antialiased">
+      <div className="w-full max-w-[1080px] bg-white rounded-3xl shadow-2xl overflow-hidden grid grid-cols-1 md:grid-cols-12 min-h-[640px] border border-gray-100" data-scroll-reveal>
         <a
           href="#landing"
           onClick={handleGoToLanding}

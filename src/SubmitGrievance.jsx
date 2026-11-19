@@ -234,7 +234,7 @@ export default function SubmitGrievance({
 
   return (
     <main className="submit-grievance-page">
-      <header className="submit-grievance-header">
+      <header className="submit-grievance-header" data-scroll-reveal>
         <div>
           <span className="submit-grievance-brand">WMSU CampusCare</span>
           <span className="submit-grievance-subtitle">Student Grievance &amp; Redressal Portal</span>
@@ -244,7 +244,7 @@ export default function SubmitGrievance({
         </button>
       </header>
 
-      <section className="submit-grievance-card">
+      <section className="submit-grievance-card" data-scroll-reveal>
         <div className="submit-grievance-heading">
           <span className="submit-eyebrow">{isEditing ? 'UPDATE SUBMISSION' : 'NEW SUBMISSION'}</span>
           <h1>{isEditing ? 'Edit your grievance' : 'File a grievance'}</h1>
@@ -277,15 +277,15 @@ export default function SubmitGrievance({
 
         <form className="submit-grievance-form" onSubmit={handleSubmit}>
           <div className="submit-form-grid">
-            <label className="submit-field">
-              <span>Category</span>
+            <div className="submit-field">
+              <span id="submit-category-label">Category</span>
               <div className="submit-category-control" ref={categoryDropdownRef}>
                 <button
                   type="button"
                   className={`submit-category-trigger${categoryDropdownOpen ? ' is-open' : ''}`}
                   ref={categoryTriggerRef}
                   role="combobox"
-                  aria-label="Category"
+                  aria-labelledby="submit-category-label"
                   aria-haspopup="listbox"
                   aria-expanded={categoryDropdownOpen}
                   aria-controls={categoryDropdownOpen ? 'submit-category-options' : undefined}
@@ -338,7 +338,7 @@ export default function SubmitGrievance({
                   {categoryError}
                 </span>
               )}
-            </label>
+            </div>
 
             <label className="submit-field submit-field-full">
               <span>Subject</span>
@@ -379,15 +379,24 @@ export default function SubmitGrievance({
 
             <div className="submit-field submit-field-full">
               <label htmlFor="grievance-attachment">Picture (optional)</label>
-              <input
-                ref={attachmentInputRef}
-                id="grievance-attachment"
-                className="submit-image-input"
-                type="file"
-                accept="image/jpeg,image/png,image/webp,image/gif"
-                onChange={handleAttachmentChange}
-              />
-              <small>JPEG, PNG, WebP, or GIF. Maximum size: 2 MB.</small>
+              <label className="submit-file-picker" htmlFor="grievance-attachment">
+                <span className="submit-file-picker-button">
+                  {formData.attachment ? 'Change picture' : 'Choose a picture'}
+                </span>
+                <span className="submit-file-picker-status" aria-live="polite">
+                  {formData.attachment?.name || 'No picture selected'}
+                </span>
+                <input
+                  ref={attachmentInputRef}
+                  id="grievance-attachment"
+                  className="submit-image-input"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  aria-describedby="grievance-attachment-help"
+                  onChange={handleAttachmentChange}
+                />
+              </label>
+              <small id="grievance-attachment-help">JPEG, PNG, WebP, or GIF. Maximum size: 2 MB.</small>
               {formData.attachment && (
                 <div className="submit-image-preview">
                   <img src={formData.attachment.data} alt="Selected grievance attachment" />

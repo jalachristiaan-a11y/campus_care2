@@ -14,6 +14,7 @@ import './Dashboard.css';
 import MyGrievances from './MyGrievances.jsx';
 import LogoutConfirmation from './LogoutConfirmation.jsx';
 import { apiRequest } from './apiClient.js';
+import useScrollReveal from './useScrollReveal.js';
 
 const Dashboard = ({
   user: suppliedUser,
@@ -22,6 +23,7 @@ const Dashboard = ({
   onFileGrievance,
   onUpdateGrievance,
   onWithdrawGrievance,
+  onComplaintStatusUpdate,
   onLogout,
   initialTab = 'Dashboard',
 }) => {
@@ -58,14 +60,16 @@ const Dashboard = ({
     day: 'numeric',
     year: 'numeric',
   });
-
   const grievances = savedGrievances;
-  const activeGrievanceCount = grievances.filter(
-    (grievance) => !['closed', 'withdrawn'].includes(grievance.statusClass),
-  ).length;
+  useScrollReveal(`${activeTab}:${grievances.length}`);
+
   const resolvedGrievanceCount = grievances.filter(
     (grievance) => grievance.statusClass === 'closed',
   ).length;
+  const underReviewCount = grievances.filter((grievance) => grievance.status === 'Under Review').length;
+  const inProgressCount = grievances.filter((grievance) => grievance.status === 'In Progress').length;
+  const needsInformationCount = grievances.filter((grievance) => grievance.status === 'Need More Information').length;
+  const rejectedCount = grievances.filter((grievance) => grievance.status === 'Rejected').length;
   const normalizedStudentId = (studentId || '').replace(/^ty/i, '').replace(/\D/g, '');
   const normalizedEmail = (user?.universityEmail || '').trim().toLowerCase();
   const normalizedName = displayName.trim().toLowerCase().replace(/\s+/g, ' ');
@@ -91,15 +95,21 @@ const Dashboard = ({
       ...grievances.slice(0, 5).map((grievance) => ({
         id: `grievance:${grievance.id}:${grievance.status}`,
         kind: 'grievance',
-        title: grievance.statusClass === 'closed'
-          ? 'Grievance resolved'
-          : grievance.statusClass === 'withdrawn'
-            ? 'Grievance withdrawn'
-          : grievance.statusClass === 'progress'
-            ? 'Grievance in progress'
-            : 'Grievance under review',
         details: `${grievance.id} · ${grievance.title}`,
         status: grievance.status || 'Status update',
+        title: grievance.status === 'Need More Information'
+          ? 'Additional information requested'
+          : grievance.status === 'Rejected'
+            ? 'Grievance rejected'
+            : grievance.status === 'Closed'
+              ? 'Grievance closed'
+              : grievance.statusClass === 'closed'
+                ? 'Grievance resolved'
+                : grievance.statusClass === 'withdrawn'
+                  ? 'Grievance withdrawn'
+                  : grievance.statusClass === 'progress'
+                    ? 'Grievance in progress'
+                    : 'Grievance under review',
       })),
     ],
     [matchingMessages, grievances],
@@ -305,7 +315,7 @@ const Dashboard = ({
           </div>
         )}
         {/* Welcome Banner */}
-        <section className="welcome-banner">
+        <section className="welcome-banner" data-scroll-reveal>
           <div className="welcome-info">
             {user?.college ? (
               <div className="tag-group">
@@ -345,7 +355,7 @@ const Dashboard = ({
 
         {activeTab === 'Help & Support' ? (
           <section className="student-help-page" aria-labelledby="student-help-title">
-            <div className="student-help-intro">
+            <div className="student-help-intro" data-scroll-reveal>
               <span className="student-help-icon"><HelpCircle size={22} aria-hidden="true" /></span>
               <div>
                 <h1 id="student-help-title">Help &amp; Support</h1>
@@ -354,7 +364,7 @@ const Dashboard = ({
             </div>
 
             <div className="student-help-grid">
-              <article className="student-help-card">
+              <article className="student-help-card" data-scroll-reveal data-interactive-card>
                 <span className="student-help-card-icon"><ClipboardList size={18} aria-hidden="true" /></span>
                 <h2>Submitting a grievance</h2>
                 <ol>
@@ -367,7 +377,7 @@ const Dashboard = ({
                 </button>
               </article>
 
-              <article className="student-help-card">
+              <article className="student-help-card" data-scroll-reveal data-interactive-card>
                 <span className="student-help-card-icon"><ShieldCheck size={18} aria-hidden="true" /></span>
                 <h2>Tracking your case</h2>
                 <p>Open <strong>My Grievances</strong> to review case details and the latest status.</p>
@@ -381,7 +391,7 @@ const Dashboard = ({
                 </button>
               </article>
 
-              <article className="student-help-card student-help-contact">
+              <article className="student-help-card student-help-contact" data-scroll-reveal data-interactive-card>
                 <span className="student-help-card-icon"><MapPin size={18} aria-hidden="true" /></span>
                 <h2>Need more help?</h2>
                 <p>For assistance with a submission or account issue, contact the Office of Student Affairs &amp; Grievances through official university channels. Include your case ID when asking about an existing grievance.</p>
@@ -393,7 +403,7 @@ const Dashboard = ({
               </article>
             </div>
 
-            <section className="student-help-faq" aria-labelledby="student-help-faq-title">
+            <section className="student-help-faq" aria-labelledby="student-help-faq-title" data-scroll-reveal>
               <h2 id="student-help-faq-title">Frequently asked questions</h2>
               <details>
                 <summary>What happens after I submit a case?</summary>
@@ -415,12 +425,13 @@ const Dashboard = ({
             onNewGrievance={onFileGrievance}
             onUpdateGrievance={onUpdateGrievance}
             onWithdrawGrievance={onWithdrawGrievance}
+            onComplaintStatusUpdate={onComplaintStatusUpdate}
           />
         ) : (
           <>
         <div className="dashboard-columns">
           <div className="dashboard-primary">
-            <section className="metrics-row" aria-label="Grievance summary">
+            <section className="metrics-row" aria-label="Grievance summary" data-scroll-reveal>
               <article className="metric-box">
                 <div className="metric-top">
                   <span className="metric-label">Total Cases</span>
@@ -431,11 +442,27 @@ const Dashboard = ({
               </article>
               <article className="metric-box">
                 <div className="metric-top">
-                  <span className="metric-label">Active Cases</span>
+                  <span className="metric-label">Under Review</span>
                   <span className="summary-icon"><Bell size={18} aria-hidden="true" /></span>
                 </div>
-                <div className="metric-num">{activeGrievanceCount}</div>
-                <div className="metric-sub">Currently being reviewed</div>
+                <div className="metric-num">{underReviewCount}</div>
+                <div className="metric-sub">Awaiting assessment</div>
+              </article>
+              <article className="metric-box">
+                <div className="metric-top">
+                  <span className="metric-label">Need Information</span>
+                  <span className="summary-icon"><HelpCircle size={18} aria-hidden="true" /></span>
+                </div>
+                <div className="metric-num">{needsInformationCount}</div>
+                <div className="metric-sub">Reply requested</div>
+              </article>
+              <article className="metric-box">
+                <div className="metric-top">
+                  <span className="metric-label">In Progress</span>
+                  <span className="summary-icon"><FilePlus2 size={18} aria-hidden="true" /></span>
+                </div>
+                <div className="metric-num">{inProgressCount}</div>
+                <div className="metric-sub">Being addressed</div>
               </article>
               <article className="metric-box">
                 <div className="metric-top">
@@ -445,10 +472,18 @@ const Dashboard = ({
                 <div className="metric-num">{resolvedGrievanceCount}</div>
                 <div className="metric-sub">Completed concerns</div>
               </article>
+              <article className="metric-box">
+                <div className="metric-top">
+                  <span className="metric-label">Rejected Cases</span>
+                  <span className="summary-icon"><ShieldCheck size={18} aria-hidden="true" /></span>
+                </div>
+                <div className="metric-num">{rejectedCount}</div>
+                <div className="metric-sub">See case history for reason</div>
+              </article>
             </section>
 
         {/* Grievances Section */}
-        <section className="grievance-section">
+        <section className="grievance-section" data-scroll-reveal>
           <div className="section-head">
             <div className="title-wrap">
               <h2 className="section-title">Recent Grievances</h2>
@@ -466,7 +501,7 @@ const Dashboard = ({
           {grievances.length ? (
             <div className="cards-stack">
               {grievances.map((item) => (
-              <div key={item.id} className="case-card">
+              <div key={item.id} className="case-card" data-scroll-reveal data-interactive-card>
                 <div className="card-header">
                   <div className="header-left">
                     <span className="case-code">{item.id}</span>
