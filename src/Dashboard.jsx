@@ -14,6 +14,7 @@ import './Dashboard.css';
 import MyGrievances from './MyGrievances.jsx';
 import LogoutConfirmation from './LogoutConfirmation.jsx';
 import { apiRequest } from './apiClient.js';
+import { compareOpenComplaintsFirst } from './complaintOrdering.js';
 import useScrollReveal from './useScrollReveal.js';
 
 const Dashboard = ({
@@ -62,6 +63,13 @@ const Dashboard = ({
   });
   const grievances = savedGrievances;
   useScrollReveal(`${activeTab}:${grievances.length}`);
+  const prioritizedGrievances = useMemo(
+    () => [...grievances].sort((left, right) => (
+      compareOpenComplaintsFirst(left, right)
+      || Date.parse(right.submittedAt) - Date.parse(left.submittedAt)
+    )),
+    [grievances],
+  );
 
   const resolvedGrievanceCount = grievances.filter(
     (grievance) => grievance.statusClass === 'closed',
@@ -500,7 +508,7 @@ const Dashboard = ({
 
           {grievances.length ? (
             <div className="cards-stack">
-              {grievances.map((item) => (
+              {prioritizedGrievances.map((item) => (
               <div key={item.id} className="case-card" data-scroll-reveal data-interactive-card>
                 <div className="card-header">
                   <div className="header-left">

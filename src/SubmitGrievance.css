@@ -138,6 +138,60 @@
   grid-column: 1 / -1;
 }
 
+.submit-urgency-field {
+  align-items: center;
+  text-align: center;
+}
+
+.submit-urgency-options {
+  width: min(100%, 760px);
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.45rem;
+  margin-inline: auto;
+}
+
+.submit-urgency-option {
+  min-width: 0;
+  min-height: 88px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  padding: 0.6rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 9px;
+  background: #ffffff;
+  color: #0f172a;
+  font: inherit;
+  text-align: center;
+  cursor: pointer;
+}
+
+.submit-urgency-option[aria-pressed="true"] {
+  border-color: #800020;
+  background: #fff1f2;
+  box-shadow: 0 0 0 1px #800020;
+}
+
+.submit-urgency-option:focus-visible {
+  outline: 2px solid rgba(128, 0, 32, 0.3);
+  outline-offset: 2px;
+}
+
+.submit-urgency-option > span {
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.submit-urgency-option > small {
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 400;
+  line-height: 1.35;
+}
+
 .submit-field input,
 .submit-field textarea {
   width: 100%;
@@ -375,6 +429,17 @@
   font-weight: 400;
 }
 
+.submit-field .submit-urgency-option > small {
+  align-self: stretch;
+}
+
+.submit-urgency-field > small {
+  align-self: center;
+  max-width: 760px;
+  font-size: 0.75rem;
+  text-align: center;
+}
+
 .submit-confirmation {
   display: flex;
   align-items: flex-start;
@@ -421,6 +486,10 @@
 }
 
 @media (max-width: 600px) {
+  .submit-urgency-options {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .submit-grievance-page {
     padding: 0 1rem 2rem;
   }

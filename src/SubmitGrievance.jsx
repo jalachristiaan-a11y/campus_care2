@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import './SubmitGrievance.css';
 import ConfirmationModal from './ConfirmationModal.jsx';
 import { apiRequest } from './apiClient.js';
+import { URGENCY_LEVELS } from './urgencyLevels.js';
 
 const categories = [
   'Academic Affairs',
@@ -25,6 +26,7 @@ export default function SubmitGrievance({
   const categoryTriggerRef = useRef(null);
   const [formData, setFormData] = useState(() => ({
     category: editingGrievance?.category ?? '',
+    urgency: editingGrievance?.urgency ?? 1,
     title: editingGrievance?.title ?? '',
     location: editingGrievance?.location ?? '',
     description: editingGrievance?.description ?? '',
@@ -84,7 +86,7 @@ export default function SubmitGrievance({
     const { name, value, type, checked } = event.target;
     setFormData((previous) => ({
       ...previous,
-      [name]: type === 'checkbox' ? checked : value,
+      [name]: type === 'checkbox' ? checked : name === 'urgency' ? Number(value) : value,
     }));
   };
 
@@ -249,7 +251,7 @@ export default function SubmitGrievance({
           <span className="submit-eyebrow">{isEditing ? 'UPDATE SUBMISSION' : 'NEW SUBMISSION'}</span>
           <h1>{isEditing ? 'Edit your grievance' : 'File a grievance'}</h1>
           <p>{isEditing
-            ? `Update the details for ${editingGrievance.id}. Editing is available while it is under review.`
+            ? `Update the details for ${editingGrievance.id} while it is waiting in the queue.`
             : 'Share the details of your concern. Your submission will be handled confidentially.'}</p>
           {settingsError && (
             <p className="submit-error" role="alert">
@@ -318,8 +320,9 @@ export default function SubmitGrievance({
                     aria-label="Categories"
                   >
                     {categories.map((category, index) => (
-                      <div
+                      <button
                         key={category}
+                        type="button"
                         className={`submit-category-option${activeCategoryIndex === index ? ' is-active' : ''}`}
                         id={`submit-category-option-${index}`}
                         role="option"
@@ -327,8 +330,8 @@ export default function SubmitGrievance({
                         onMouseMove={() => setActiveCategoryIndex(index)}
                         onClick={() => selectCategory(category, index)}
                       >
-                        {category}
-                      </div>
+                       {category}
+                      </button>
                     ))}
                   </div>
                 )}
@@ -351,6 +354,29 @@ export default function SubmitGrievance({
                 required
               />
             </label>
+
+            <div className="submit-field submit-field-full submit-urgency-field">
+              <span>Urgency level</span>
+              <div className="submit-urgency-options" role="group" aria-label="Choose an urgency level">
+                {URGENCY_LEVELS.map((level) => (
+                  <button
+                    key={level.value}
+                    type="button"
+                    aria-pressed={formData.urgency === level.value}
+                    aria-label={`${level.value}, ${level.label}: ${level.description}`}
+                    className="submit-urgency-option"
+                    onClick={() => setFormData((previous) => ({
+                      ...previous,
+                      urgency: level.value,
+                    }))}
+                  >
+                    <span>{level.value} · {level.label}</span>
+                    <small>{level.description}</small>
+                  </button>
+                ))}
+              </div>
+              <small>1 is least urgent; 4 is most urgent. Choose based on impact and time sensitivity.</small>
+            </div>
 
             <label className="submit-field submit-field-full">
               <span>Location (optional)</span>
@@ -399,7 +425,12 @@ export default function SubmitGrievance({
               <small id="grievance-attachment-help">JPEG, PNG, WebP, or GIF. Maximum size: 2 MB.</small>
               {formData.attachment && (
                 <div className="submit-image-preview">
-                  <img src={formData.attachment.data} alt="Selected grievance attachment" />
+                  <img
+                    src={formData.attachment.data}
+                    alt="Selected grievance attachment"
+                    width="160"
+                    height="160"
+                  />
                   <div>
                     <span>{formData.attachment.name}</span>
                     <button type="button" onClick={handleRemoveAttachment}>

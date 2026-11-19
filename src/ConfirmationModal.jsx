@@ -18,6 +18,8 @@ export default function ConfirmationModal({
   const [copyStatus, setCopyStatus] = useState('');
   const submitButtonRef = useRef(null);
   const promptDialogRef = useRef(null);
+  const resultDialogRef = useRef(null);
+  const closeButtonRef = useRef(null);
   const isSubmitConfirmation = mode === 'submit-confirmation';
 
   useEffect(() => {
@@ -46,6 +48,37 @@ export default function ConfirmationModal({
     const previouslyFocused = document.activeElement;
     submitButtonRef.current?.focus();
     return () => previouslyFocused?.focus?.();
+  }, [isSubmitConfirmation]);
+
+  useEffect(() => {
+    if (isSubmitConfirmation) return undefined;
+
+    const previouslyFocused = document.activeElement;
+    closeButtonRef.current?.focus();
+    return () => previouslyFocused?.focus?.();
+  }, [isSubmitConfirmation]);
+
+  useEffect(() => {
+    const dialog = isSubmitConfirmation ? promptDialogRef.current : resultDialogRef.current;
+    if (!dialog) return undefined;
+
+    const handleTab = (event) => {
+      if (event.key !== 'Tab') return;
+      const buttons = dialog.querySelectorAll('button:not(:disabled)');
+      if (!buttons.length) return;
+      const firstButton = buttons[0];
+      const lastButton = buttons[buttons.length - 1];
+      if (event.shiftKey && document.activeElement === firstButton) {
+        event.preventDefault();
+        lastButton.focus();
+      } else if (!event.shiftKey && document.activeElement === lastButton) {
+        event.preventDefault();
+        firstButton.focus();
+      }
+    };
+
+    dialog.addEventListener('keydown', handleTab);
+    return () => dialog.removeEventListener('keydown', handleTab);
   }, [isSubmitConfirmation]);
 
   useEffect(() => {
@@ -116,6 +149,7 @@ export default function ConfirmationModal({
           {error && <p className="confirmation-prompt-error" role="alert">{error}</p>}
           <div className="confirmation-prompt-actions">
             <button
+              ref={closeButtonRef}
               type="button"
               className="confirmation-secondary-button"
               onClick={onClose}
@@ -148,6 +182,7 @@ export default function ConfirmationModal({
       }}
     >
       <section
+        ref={resultDialogRef}
         className="confirmation-card"
         role="dialog"
         aria-modal="true"

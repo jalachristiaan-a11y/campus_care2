@@ -38,7 +38,7 @@ export default function Register({ onBackToLogin }) {
         }),
       });
 
-      setSuccess('Account created successfully! Redirecting to login...');
+      setSuccess('Account created successfully! Redirecting to login…');
       setTimeout(() => {
         onBackToLogin();
       }, 1500);
@@ -87,9 +87,13 @@ export default function Register({ onBackToLogin }) {
 
             <form onSubmit={handleSubmit} className="register-form">
               <div className="form-group" style={{ marginBottom: '12px' }}>
-                <label>Student ID</label>
+                <label htmlFor="register-student-id">Student ID</label>
                 <input
+                  id="register-student-id"
+                  name="student-id"
                   type="text"
+                  autoComplete="username"
+                  spellCheck={false}
                   value={id}
                   onChange={(e) => setId(e.target.value)}
                   placeholder="e.g. 2023-00001"
@@ -99,9 +103,12 @@ export default function Register({ onBackToLogin }) {
               </div>
 
               <div className="form-group" style={{ marginBottom: '12px' }}>
-                <label>First Name</label>
+                <label htmlFor="register-first-name">First Name</label>
                 <input
+                  id="register-first-name"
+                  name="given-name"
                   type="text"
+                  autoComplete="given-name"
                   value={firstName}
                   onChange={(e) => setFirstName(e.target.value)}
                   placeholder="e.g. Juan"
@@ -111,9 +118,12 @@ export default function Register({ onBackToLogin }) {
               </div>
 
               <div className="form-group" style={{ marginBottom: '12px' }}>
-                <label>Last Name</label>
+                <label htmlFor="register-last-name">Last Name</label>
                 <input
+                  id="register-last-name"
+                  name="family-name"
                   type="text"
+                  autoComplete="family-name"
                   value={lastName}
                   onChange={(e) => setLastName(e.target.value)}
                   placeholder="e.g. Dela Cruz"
@@ -123,9 +133,13 @@ export default function Register({ onBackToLogin }) {
               </div>
 
               <div className="form-group" style={{ marginBottom: '12px' }}>
-                <label>University Email</label>
+                <label htmlFor="register-email">University Email</label>
                 <input
+                  id="register-email"
+                  name="email"
                   type="email"
+                  autoComplete="email"
+                  spellCheck={false}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="e.g. student@wmsu.edu.ph"
@@ -152,6 +166,7 @@ export default function Register({ onBackToLogin }) {
                 <div className="form-password-control">
                   <input
                     id="register-password"
+                    name="password"
                     type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
@@ -170,7 +185,7 @@ export default function Register({ onBackToLogin }) {
                 disabled={loading}
                 style={{ width: '100%', marginBottom: '10px' }}
               >
-                {loading ? 'Registering...' : 'Register'}
+                {loading ? 'Registering…' : 'Register'}
               </button>
             </form>
 
