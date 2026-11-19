@@ -7,13 +7,14 @@ import {
 import campusCareAuthBackground from './assets/campuscare-auth-background.png';
 import CampusCareLanding from './CampusCareLanding.jsx';
 import Register from './Register.jsx';
+import StudentVerification from './StudentVerification.jsx';
 import Dashboard from './Dashboard.jsx';
 import SubmitGrievance from './SubmitGrievance.jsx';
 import GrievanceQueue from './GrievanceQueue.jsx';
 import { apiRequest } from './apiClient.js';
 import useScrollReveal from './useScrollReveal.js';
 
-const protectedViews = new Set(['dashboard', 'admin', 'submit-grievance']);
+const protectedViews = new Set(['dashboard', 'admin', 'submit-grievance', 'verification']);
 
 const mapApiUser = (user) => ({
   universityEmail: user.email,
@@ -22,6 +23,10 @@ const mapApiUser = (user) => ({
   college: user.department || '',
   department: user.department || '',
   role: user.role,
+  emailVerified: Boolean(user.email_verified_at || user.emailVerified),
+  corStatus: user.cor_status || user.corStatus || 'pending',
+  corSubmitted: Boolean(user.corSubmitted || user.cor_submitted_at),
+  corFileName: user.corFileName || user.cor_file_name || '',
 });
 
 const getInitialView = () => {
@@ -35,6 +40,9 @@ const getInitialView = () => {
 
   if (window.location.hash === '#submit-grievance') {
     return 'submit-grievance';
+  }
+  if (window.location.hash === '#verification') {
+    return 'verification';
   }
 
   if (window.location.hash === '#admin') {
@@ -191,6 +199,11 @@ export default function App() {
   };
 
   const handleOpenSubmitGrievance = () => {
+    if (!dashboardUser?.emailVerified || dashboardUser?.corStatus !== 'approved') {
+      setCurrentView('verification');
+      window.location.hash = '#verification';
+      return;
+    }
     setCurrentView('submit-grievance');
     window.location.hash = '#submit-grievance';
   };
@@ -293,7 +306,13 @@ export default function App() {
       const session = { user: mapApiUser(user) };
       setAuthSession(session);
       setDashboardUser(session.user);
-      const destination = user.role === 'admin' ? 'admin' : 'dashboard';
+      const mappedUser = mapApiUser(user);
+      const destination = mappedUser.role === 'admin'
+        ? 'admin'
+        : (!mappedUser.emailVerified || mappedUser.corStatus !== 'approved')
+          ? 'verification'
+          : 'dashboard';
+      setDashboardUser(mappedUser);
       setCurrentView(destination);
       window.location.hash = `#${destination}`;
     } catch (error) {
@@ -340,6 +359,34 @@ export default function App() {
       <div className="app-view-transition">
         <Register
           onBackToLogin={handleGoToLogin}
+        />
+      </div>
+    );
+  }
+
+  if (currentView === 'verification') {
+    return (
+      <div className="app-view-transition">
+        <StudentVerification
+          user={dashboardUser}
+          onComplete={async () => {
+            try {
+              const result = await apiRequest('/api/auth/session');
+              const refreshedUser = mapApiUser(result.user);
+              setDashboardUser(refreshedUser);
+              setAuthSession({ user: refreshedUser });
+              if (refreshedUser.emailVerified && refreshedUser.corStatus === 'approved') {
+                setCurrentView('dashboard');
+                window.location.hash = '#dashboard';
+              }
+            } catch {
+              setNotification({
+                type: 'error',
+                message: 'Unable to refresh verification status. Please log in again.',
+              });
+            }
+          }}
+          onBack={handleGoToLogin}
         />
       </div>
     );
@@ -441,13 +488,15 @@ export default function App() {
                 <div className="relative">
                   <input
                     id="campus-identifier"
+                    name="identifier"
                     type="text"
                     autoComplete="username"
+                    spellCheck={false}
                     required
                     value={identifier}
                     onChange={(event) => setIdentifier(event.target.value)}
                     placeholder="Student ID (e.g. 2025-03461) or admin@wmsu.edu.ph"
-                    className="w-full cursor-text caret-[#800020] px-3.5 py-2.5 sm:py-3 bg-white text-slate-900 font-semibold text-sm rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#800020]/20 focus:border-[#800020] transition-all placeholder:text-gray-400"
+                    className="w-full cursor-text caret-[#800020] px-3.5 py-2.5 sm:py-3 bg-white text-slate-900 font-semibold text-sm rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#800020]/20 focus:border-[#800020] transition-[border-color,box-shadow,background-color] placeholder:text-gray-400"
                   />
                 </div>
               </div>
@@ -476,13 +525,14 @@ export default function App() {
                 <div className="relative">
                   <input
                     id="campus-password"
+                    name="password"
                     type={showPassword ? 'text' : 'password'}
                     autoComplete="current-password"
                     required
                     value={password}
                     onChange={(event) => setPassword(event.target.value)}
                     placeholder="••••••••••••"
-                    className="w-full cursor-text caret-[#800020] px-3.5 py-2.5 sm:py-3 bg-white text-slate-900 font-semibold text-sm rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#800020]/20 focus:border-[#800020] transition-all placeholder:text-gray-400"
+                    className="w-full cursor-text caret-[#800020] px-3.5 py-2.5 sm:py-3 bg-white text-slate-900 font-semibold text-sm rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#800020]/20 focus:border-[#800020] transition-[border-color,box-shadow,background-color] placeholder:text-gray-400"
                   />
                 </div>
               </div>
@@ -490,7 +540,7 @@ export default function App() {
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full py-3 px-4 bg-[#800020] hover:bg-[#66001a] text-white font-semibold rounded-xl text-sm shadow-md hover:shadow-lg active:scale-[0.99] transition-all duration-150 flex items-center justify-center gap-2 disabled:opacity-70 mt-2"
+                className="w-full py-3 px-4 bg-[#800020] hover:bg-[#66001a] text-white font-semibold rounded-xl text-sm shadow-md hover:shadow-lg active:scale-[0.99] transition-[transform,color,background-color,box-shadow] duration-150 flex items-center justify-center gap-2 disabled:opacity-70 mt-2"
               >
                 {isLoading ? (
                   <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />

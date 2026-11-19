@@ -67,7 +67,9 @@ const authenticateSession = async (req, res, next) => {
 
   try {
     const result = await db.query(
-      `SELECT u.id, u.full_name, u.email, u.role, u.department_id, d.name AS department
+      `SELECT u.id, u.full_name, u.email, u.role, u.department_id,
+              u.email_verified_at, u.cor_status, u.cor_submitted_at,
+              u.cor_document->>'name' AS cor_file_name, d.name AS department
        FROM user_sessions s
        JOIN users u ON u.id = s.user_id
        LEFT JOIN departments d ON d.id = u.department_id

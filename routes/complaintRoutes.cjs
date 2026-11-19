@@ -21,8 +21,16 @@ const allowedStatuses = new Set([
   'Closed',
 ]);
 const attachmentPattern = /^data:(image\/(?:jpeg|png|webp|gif));base64,([A-Za-z0-9+/]+={0,2})$/;
+const complaintDetailsQuery = `
+  SELECT c.*, reviewer.full_name AS reviewer_name, d.name AS student_department
+  FROM complaints c
+  LEFT JOIN users student ON student.id = c.user_id
+  LEFT JOIN departments d ON d.id = student.department_id
+  LEFT JOIN users reviewer ON reviewer.id = c.assigned_admin_id
+  WHERE c.id = $1
+`;
 
-const formatComplaint = (row) => {
+const formatComplaint = (row, { includeReviewerId = false } = {}) => {
   const submittedAt = row.created_at.toISOString();
   const statusClass = row.status === 'Resolved'
     ? 'closed'
@@ -44,9 +52,13 @@ const formatComplaint = (row) => {
     title: row.title,
     description: row.description,
     location: row.location,
+    urgency: Number(row.urgency ?? 1),
     status: row.status,
     statusClass,
     department: row.department,
+    assignedReviewerName: row.reviewer_name || '',
+    reviewerAssigned: Boolean(row.assigned_admin_id),
+    ...(includeReviewerId ? { assignedReviewerId: row.assigned_admin_id || '' } : {}),
     updated: `${row.status} · ${new Intl.DateTimeFormat(undefined, {
       dateStyle: 'medium',
       timeStyle: 'short',
@@ -64,7 +76,13 @@ const formatActivity = (row) => ({
   id: row.id,
   type: row.event_type,
   message: row.message,
-  actor: row.actor_name || (row.actor_role === 'admin' ? 'CampusCare Administrator' : 'Student'),
+  actor: row.actor_name || (
+    row.actor_role === 'admin'
+      ? 'CampusCare Administrator'
+      : row.actor_role === 'system'
+        ? 'CampusCare System'
+        : 'Student'
+  ),
   actorRole: row.actor_role,
   createdAt: row.created_at.toISOString(),
 });
@@ -79,30 +97,55 @@ router.get('/', async (req, res) => {
   try {
     const result = req.user.role === 'admin'
       ? await db.query(
-        `SELECT c.public_id, c.category, c.title, c.description, c.location, c.status,
-                c.department, c.created_at, c.updated_at, c.submitted_by,
+        `SELECT c.public_id, c.category, c.title, c.description, c.location, c.urgency, c.status,
+                c.department, c.assigned_admin_id, reviewer.full_name AS reviewer_name,
+                c.created_at, c.updated_at, c.submitted_by,
                 c.submitted_by_name, c.student_id, c.attachment, d.name AS student_department
          FROM complaints c
          LEFT JOIN users u ON u.id = c.user_id
          LEFT JOIN departments d ON d.id = u.department_id
+         LEFT JOIN users reviewer ON reviewer.id = c.assigned_admin_id
          ORDER BY c.created_at DESC`
       )
       : await db.query(
-        `SELECT c.public_id, c.category, c.title, c.description, c.location, c.status,
-                c.department, c.created_at, c.updated_at, c.submitted_by,
+        `SELECT c.public_id, c.category, c.title, c.description, c.location, c.urgency, c.status,
+                c.department, c.assigned_admin_id, reviewer.full_name AS reviewer_name,
+                c.created_at, c.updated_at, c.submitted_by,
                 c.submitted_by_name, c.student_id, c.attachment, d.name AS student_department
          FROM complaints c
          LEFT JOIN users u ON u.id = c.user_id
          LEFT JOIN departments d ON d.id = u.department_id
+         LEFT JOIN users reviewer ON reviewer.id = c.assigned_admin_id
          WHERE c.user_id = $1
          ORDER BY c.created_at DESC`,
         [req.user.id]
       );
 
-    return res.json({ complaints: result.rows.map(formatComplaint) });
+    return res.json({
+      complaints: result.rows.map((row) => formatComplaint(row, {
+        includeReviewerId: req.user.role === 'admin',
+      })),
+    });
   } catch (error) {
     console.error('Complaint list error:', error);
     return res.status(500).json({ message: 'Unable to load complaints.' });
+  }
+});
+
+router.get('/reviewers', authorizeRoles('admin'), async (_req, res) => {
+  try {
+    const result = await db.query(
+      `SELECT id, full_name
+       FROM users
+       WHERE role = 'admin'
+       ORDER BY full_name, id`,
+    );
+    return res.json({
+      reviewers: result.rows.map((row) => ({ id: row.id, fullName: row.full_name })),
+    });
+  } catch (error) {
+    console.error('Complaint reviewers load error:', error);
+    return res.status(500).json({ message: 'Unable to load complaint reviewers.' });
   }
 });
 
@@ -112,6 +155,7 @@ router.post('/', authorizeRoles('student'), async (req, res) => {
   const title = typeof body.title === 'string' ? body.title.trim() : '';
   const description = typeof body.description === 'string' ? body.description.trim() : '';
   const location = typeof body.location === 'string' ? body.location.trim() : '';
+  const urgency = body.urgency === undefined ? 1 : Number(body.urgency);
   const attachment = body.attachment ?? null;
 
   if (
@@ -121,9 +165,12 @@ router.post('/', authorizeRoles('student'), async (req, res) => {
     || !description
     || description.length > 3000
     || location.length > 120
+    || !Number.isInteger(urgency)
+    || urgency < 1
+    || urgency > 4
   ) {
     return res.status(400).json({
-      message: 'Provide a valid category, a subject up to 120 characters, and details up to 3000 characters.',
+      message: 'Provide a valid category, subject, details, and an urgency level from 1 to 4.',
     });
   }
 
@@ -144,6 +191,23 @@ router.post('/', authorizeRoles('student'), async (req, res) => {
   }
 
   try {
+    const eligibility = await db.query(
+      `SELECT email_verified_at, cor_status
+       FROM users
+       WHERE id = $1 AND role = 'student'`,
+      [req.user.id],
+    );
+    const student = eligibility.rows[0];
+    if (!student?.email_verified_at) {
+      return res.status(403).json({
+        message: 'Verify your WMSU email before filing a complaint.',
+      });
+    }
+    if (student.cor_status !== 'approved') {
+      return res.status(403).json({
+        message: 'Your COR must be approved by an administrator before filing a complaint.',
+      });
+    }
     const settingsResult = await db.query(
       `SELECT value->>'intakeOpen' AS intake_open
        FROM system_settings
@@ -174,12 +238,12 @@ router.post('/', authorizeRoles('student'), async (req, res) => {
       `WITH inserted AS (
          INSERT INTO complaints (
            public_id, user_id, submitted_by, submitted_by_name, student_id,
-           category, title, description, location, attachment
+           category, title, description, location, attachment, urgency
          )
-         VALUES ($1, $2, $3, $4, $2, $5, $6, $7, $8, $9::jsonb)
-         RETURNING id, public_id, category, title, description, location, status,
+         VALUES ($1, $2, $3, $4, $2, $5, $6, $7, $8, $9::jsonb, $10)
+         RETURNING id, public_id, category, title, description, location, urgency, status,
                    department, created_at, updated_at, submitted_by,
-                   submitted_by_name, student_id, attachment
+                   submitted_by_name, student_id, attachment, assigned_admin_id, user_id
        ), logged AS (
          INSERT INTO complaint_activity (complaint_id, actor_user_id, actor_role, event_type, message)
          SELECT id, $2, 'student', 'submitted', 'Complaint submitted.' FROM inserted
@@ -195,6 +259,7 @@ router.post('/', authorizeRoles('student'), async (req, res) => {
         description,
         location,
         attachment ? JSON.stringify(attachment) : null,
+        urgency,
       ]
     );
     return res.status(201).json({
@@ -253,9 +318,9 @@ router.post('/:complaintId/responses', async (req, res) => {
            UPDATE complaints
            SET status = 'Under Review', updated_at = CURRENT_TIMESTAMP
            WHERE public_id = $1 AND user_id = $2 AND status = 'Need More Information'
-           RETURNING id, public_id, category, title, description, location, status,
+           RETURNING id, public_id, category, title, description, location, urgency, status,
                      department, created_at, updated_at, submitted_by,
-                     submitted_by_name, student_id, attachment
+                     submitted_by_name, student_id, attachment, assigned_admin_id
          ), logged AS (
            INSERT INTO complaint_activity
              (complaint_id, actor_user_id, actor_role, event_type, message)
@@ -264,7 +329,7 @@ router.post('/:complaintId/responses', async (req, res) => {
          ), status_logged AS (
            INSERT INTO complaint_activity
              (complaint_id, actor_user_id, actor_role, event_type, message)
-           SELECT id, $2, 'admin', 'status',
+           SELECT id, NULL, 'system', 'status',
                   'Status changed to Under Review after the student provided additional information.'
            FROM updated
          )
@@ -272,9 +337,11 @@ router.post('/:complaintId/responses', async (req, res) => {
                 logged.event_type AS activity_type,
                 logged.message AS activity_message,
                 logged.actor_role AS activity_actor_role,
-                logged.created_at AS activity_created_at
+                logged.created_at AS activity_created_at,
+                reviewer.full_name AS reviewer_name
          FROM updated
-         JOIN logged ON logged.complaint_id = updated.id`,
+         JOIN logged ON logged.complaint_id = updated.id
+         LEFT JOIN users reviewer ON reviewer.id = updated.assigned_admin_id`,
         [req.params.complaintId, req.user.id, message],
       );
       if (!result.rows[0]) {
@@ -318,7 +385,8 @@ router.post('/:complaintId/responses', async (req, res) => {
          (complaint_id, actor_user_id, actor_role, event_type, message)
        SELECT id, $2, 'admin', 'response', $3
        FROM complaints
-       WHERE public_id = $1 AND status <> 'Withdrawn'
+       WHERE public_id = $1
+         AND status NOT IN ('Resolved', 'Rejected', 'Withdrawn', 'Closed')
        RETURNING id, event_type, message, actor_role, created_at`,
       [req.params.complaintId, req.user.id, message],
     );
@@ -330,7 +398,12 @@ router.post('/:complaintId/responses', async (req, res) => {
       if (!complaint.rows[0]) {
         return res.status(404).json({ message: 'Complaint not found.' });
       }
-      return res.status(409).json({ message: 'Responses cannot be added to a withdrawn complaint.' });
+      if (['Resolved', 'Rejected', 'Withdrawn', 'Closed'].includes(complaint.rows[0].status)) {
+        return res.status(409).json({
+          message: 'Responses cannot be added after a complaint is resolved, rejected, withdrawn, or closed.',
+        });
+      }
+      return res.status(409).json({ message: 'The complaint status changed. Reload it before responding.' });
     }
 
     return res.status(201).json({
@@ -348,6 +421,7 @@ router.patch('/:complaintId', authorizeRoles('student'), async (req, res) => {
   const title = typeof body.title === 'string' ? body.title.trim() : '';
   const description = typeof body.description === 'string' ? body.description.trim() : '';
   const location = typeof body.location === 'string' ? body.location.trim() : '';
+  const urgency = body.urgency === undefined ? 1 : Number(body.urgency);
   const attachment = body.attachment ?? null;
 
   if (
@@ -357,9 +431,12 @@ router.patch('/:complaintId', authorizeRoles('student'), async (req, res) => {
     || !description
     || description.length > 3000
     || location.length > 120
+    || !Number.isInteger(urgency)
+    || urgency < 1
+    || urgency > 4
   ) {
     return res.status(400).json({
-      message: 'Provide a valid category, a subject up to 120 characters, and details up to 3000 characters.',
+    message: 'Provide a valid category, subject, details, and an urgency level from 1 to 4.',
     });
   }
 
@@ -384,21 +461,27 @@ router.patch('/:complaintId', authorizeRoles('student'), async (req, res) => {
       `WITH updated AS (
          UPDATE complaints
          SET category = $1, title = $2, description = $3, location = $4,
-             attachment = $5::jsonb, updated_at = CURRENT_TIMESTAMP
-         WHERE public_id = $6 AND user_id = $7 AND status = 'Under Review'
-         RETURNING id, public_id, category, title, description, location, status,
+             urgency = $5, attachment = $6::jsonb,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE public_id = $7 AND user_id = $8
+           AND status = 'Submitted' AND assigned_admin_id IS NULL
+         RETURNING id, public_id, category, title, description, location, urgency, status,
                    department, created_at, updated_at, submitted_by,
-                   submitted_by_name, student_id, attachment
+                   submitted_by_name, student_id, attachment, assigned_admin_id
        ), logged AS (
          INSERT INTO complaint_activity (complaint_id, actor_user_id, actor_role, event_type, message)
-         SELECT id, $7, 'student', 'edited', 'Complaint details updated by student.' FROM updated
+         SELECT id, $8, 'student', 'edited', 'Complaint details updated by student.'
+         FROM updated
        )
-       SELECT * FROM updated`,
+       SELECT updated.*, reviewer.full_name AS reviewer_name
+       FROM updated
+       LEFT JOIN users reviewer ON reviewer.id = updated.assigned_admin_id`,
       [
         category,
         title,
         description,
         location,
+        urgency,
         attachment ? JSON.stringify(attachment) : null,
         req.params.complaintId,
         req.user.id,
@@ -409,13 +492,17 @@ router.patch('/:complaintId', authorizeRoles('student'), async (req, res) => {
     }
 
     const existing = await db.query(
-      'SELECT status FROM complaints WHERE public_id = $1 AND user_id = $2',
+      'SELECT status, assigned_admin_id FROM complaints WHERE public_id = $1 AND user_id = $2',
       [req.params.complaintId, req.user.id],
     );
     if (!existing.rows[0]) {
       return res.status(404).json({ message: 'Complaint not found.' });
     }
-    return res.status(409).json({ message: 'Only complaints under review can be edited.' });
+    return res.status(409).json({
+      message: existing.rows[0].assigned_admin_id
+        ? 'An administrator has started reviewing this complaint, so it can no longer be edited.'
+        : 'Only complaints waiting for review can be edited.',
+    });
   } catch (error) {
     console.error('Complaint edit error:', error);
     return res.status(500).json({ message: 'Unable to update complaint.' });
@@ -428,15 +515,18 @@ router.delete('/:complaintId', authorizeRoles('student'), async (req, res) => {
       `WITH updated AS (
          UPDATE complaints
          SET status = 'Withdrawn', updated_at = CURRENT_TIMESTAMP
-         WHERE public_id = $1 AND user_id = $2 AND status = 'Under Review'
-         RETURNING id, public_id, category, title, description, location, status,
+         WHERE public_id = $1 AND user_id = $2
+           AND status = 'Submitted' AND assigned_admin_id IS NULL
+         RETURNING id, public_id, category, title, description, location, urgency, status,
                    department, created_at, updated_at, submitted_by,
-                   submitted_by_name, student_id, attachment
+                   submitted_by_name, student_id, attachment, assigned_admin_id
        ), logged AS (
          INSERT INTO complaint_activity (complaint_id, actor_user_id, actor_role, event_type, message)
          SELECT id, $2, 'student', 'withdrawn', 'Complaint withdrawn by student.' FROM updated
        )
-       SELECT * FROM updated`,
+       SELECT updated.*, reviewer.full_name AS reviewer_name
+       FROM updated
+       LEFT JOIN users reviewer ON reviewer.id = updated.assigned_admin_id`,
       [req.params.complaintId, req.user.id],
     );
     if (result.rows[0]) {
@@ -444,13 +534,18 @@ router.delete('/:complaintId', authorizeRoles('student'), async (req, res) => {
     }
 
     const existing = await db.query(
-      'SELECT status FROM complaints WHERE public_id = $1 AND user_id = $2',
+      'SELECT status, assigned_admin_id FROM complaints WHERE public_id = $1 AND user_id = $2',
       [req.params.complaintId, req.user.id],
     );
     if (!existing.rows[0]) {
       return res.status(404).json({ message: 'Complaint not found.' });
     }
-    return res.status(409).json({ message: 'Only complaints under review can be withdrawn.' });
+    if (existing.rows[0].assigned_admin_id) {
+      return res.status(409).json({
+        message: 'An administrator has claimed this complaint, so it can no longer be withdrawn.',
+      });
+    }
+    return res.status(409).json({ message: 'Only complaints waiting for review can be withdrawn.' });
   } catch (error) {
     console.error('Complaint withdrawal error:', error);
     return res.status(500).json({ message: 'Unable to withdraw complaint.' });
@@ -493,15 +588,17 @@ router.patch('/:complaintId/status', authorizeRoles('admin'), async (req, res) =
              OR ($1 = 'Rejected' AND status IN ('Under Review', 'Need More Information', 'In Progress'))
              OR ($1 = 'Closed' AND status = 'Resolved')
            )
-         RETURNING id, public_id, category, title, description, location, status,
+         RETURNING id, public_id, category, title, description, location, urgency, status,
                    department, created_at, updated_at, submitted_by,
-                   submitted_by_name, student_id, attachment
+                   submitted_by_name, student_id, attachment, assigned_admin_id
        ), logged AS (
          INSERT INTO complaint_activity
            (complaint_id, actor_user_id, actor_role, event_type, message)
          SELECT id, $3, 'admin', $4, $5 FROM updated
        )
-       SELECT * FROM updated`,
+       SELECT updated.*, reviewer.full_name AS reviewer_name
+       FROM updated
+       LEFT JOIN users reviewer ON reviewer.id = updated.assigned_admin_id`,
       [
         status,
         req.params.complaintId,
@@ -523,7 +620,9 @@ router.patch('/:complaintId/status', authorizeRoles('admin'), async (req, res) =
       });
     }
 
-    return res.json({ complaint: formatComplaint(result.rows[0]) });
+    return res.json({
+      complaint: formatComplaint(result.rows[0], { includeReviewerId: true }),
+    });
   } catch (error) {
     console.error('Complaint status update error:', error);
     return res.status(500).json({ message: 'Unable to update complaint status.' });
@@ -544,25 +643,149 @@ router.patch('/:complaintId/department', authorizeRoles('admin'), async (req, re
          UPDATE complaints
          SET department = $1, updated_at = CURRENT_TIMESTAMP
          WHERE public_id = $2
-         RETURNING id, public_id, category, title, description, location, status,
+         RETURNING id, public_id, category, title, description, location, urgency, status,
                    department, created_at, updated_at, submitted_by,
-                   submitted_by_name, student_id, attachment
+                   submitted_by_name, student_id, attachment, assigned_admin_id
        ), logged AS (
          INSERT INTO complaint_activity
            (complaint_id, actor_user_id, actor_role, event_type, message)
          SELECT id, $3, 'admin', 'assignment', $4 FROM updated
        )
-       SELECT * FROM updated`,
+       SELECT updated.*, reviewer.full_name AS reviewer_name
+       FROM updated
+       LEFT JOIN users reviewer ON reviewer.id = updated.assigned_admin_id`,
       [department, req.params.complaintId, req.user.id, `Assigned to ${department}.`]
     );
     if (!result.rows[0]) {
       return res.status(404).json({ message: 'Complaint not found.' });
     }
 
-    return res.json({ complaint: formatComplaint(result.rows[0]) });
+    return res.json({
+      complaint: formatComplaint(result.rows[0], { includeReviewerId: true }),
+    });
   } catch (error) {
     console.error('Complaint reassignment error:', error);
     return res.status(500).json({ message: 'Unable to reassign complaint.' });
+  }
+});
+
+router.patch('/:complaintId/reviewer', authorizeRoles('admin'), async (req, res) => {
+  const reviewerId = typeof req.body?.reviewerId === 'string'
+    ? req.body.reviewerId.trim()
+    : '';
+  if (!reviewerId || reviewerId.length > 20) {
+    return res.status(400).json({ message: 'Choose an administrator to review this complaint.' });
+  }
+
+  let client;
+  let transactionOpen = false;
+  try {
+    client = await db.connect();
+    await client.query('BEGIN');
+    transactionOpen = true;
+
+    const complaintResult = await client.query(
+      `SELECT c.id, c.public_id, c.user_id, c.assigned_admin_id,
+              previous_reviewer.full_name AS previous_reviewer_name, c.status
+       FROM complaints c
+       LEFT JOIN users previous_reviewer ON previous_reviewer.id = c.assigned_admin_id
+       WHERE c.public_id = $1
+       FOR UPDATE OF c`,
+      [req.params.complaintId],
+    );
+    const complaint = complaintResult.rows[0];
+    if (!complaint) {
+      await client.query('ROLLBACK');
+      transactionOpen = false;
+      return res.status(404).json({ message: 'Complaint not found.' });
+    }
+
+    if (['Resolved', 'Rejected', 'Withdrawn', 'Closed'].includes(complaint.status)) {
+      await client.query('ROLLBACK');
+      transactionOpen = false;
+      return res.status(409).json({ message: 'Only active complaints can be assigned to a reviewer.' });
+    }
+
+    const reviewerResult = await client.query(
+      `SELECT id, full_name
+       FROM users
+       WHERE id = $1 AND role = 'admin'`,
+      [reviewerId],
+    );
+    const reviewer = reviewerResult.rows[0];
+    if (!reviewer) {
+      await client.query('ROLLBACK');
+      transactionOpen = false;
+      return res.status(400).json({ message: 'The selected reviewer is not an administrator.' });
+    }
+
+    if (complaint.assigned_admin_id === reviewer.id) {
+      const currentResult = await client.query(complaintDetailsQuery, [complaint.id]);
+      await client.query('COMMIT');
+      transactionOpen = false;
+      return res.json({
+        complaint: formatComplaint(currentResult.rows[0], { includeReviewerId: true }),
+      });
+    }
+
+    const isReassignment = Boolean(complaint.assigned_admin_id);
+    await client.query(
+      `UPDATE complaints
+       SET assigned_admin_id = $1, assigned_at = CURRENT_TIMESTAMP,
+           status = CASE WHEN assigned_admin_id IS NULL THEN 'Under Review' ELSE status END,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $2`,
+      [reviewer.id, complaint.id],
+    );
+
+    const activityMessage = isReassignment
+      ? `Review reassigned from ${complaint.previous_reviewer_name || 'another administrator'} to ${reviewer.full_name}.`
+      : `Review assigned to ${reviewer.full_name}. Status changed to Under Review.`;
+    await client.query(
+      `INSERT INTO complaint_activity
+         (complaint_id, actor_user_id, actor_role, event_type, message)
+       VALUES ($1, $2, 'admin', $3, $4)`,
+      [
+        complaint.id,
+        req.user.id,
+        isReassignment ? 'reviewer_reassigned' : 'reviewer_assigned',
+        activityMessage,
+      ],
+    );
+
+    if (complaint.user_id) {
+      const subject = isReassignment
+        ? 'Your complaint reviewer changed'
+        : 'A reviewer was assigned to your complaint';
+      const notificationMessage = isReassignment
+        ? `Your complaint ${complaint.public_id} is now assigned to ${reviewer.full_name}.`
+        : `Your complaint ${complaint.public_id} is now under review with ${reviewer.full_name}.`;
+      await client.query(
+        `INSERT INTO student_messages
+           (sender_user_id, recipient_user_id, subject, message, type)
+         VALUES ($1, $2, $3, $4, 'Complaint Update')`,
+        [req.user.id, complaint.user_id, subject, notificationMessage],
+      );
+    }
+
+    const updatedResult = await client.query(complaintDetailsQuery, [complaint.id]);
+    await client.query('COMMIT');
+    transactionOpen = false;
+    return res.json({
+      complaint: formatComplaint(updatedResult.rows[0], { includeReviewerId: true }),
+    });
+  } catch (error) {
+    if (client && transactionOpen) {
+      try {
+        await client.query('ROLLBACK');
+      } catch (rollbackError) {
+        console.error('Complaint reviewer assignment rollback error:', rollbackError);
+      }
+    }
+    console.error('Complaint reviewer assignment error:', error);
+    return res.status(500).json({ message: 'Unable to assign the complaint reviewer.' });
+  } finally {
+    client?.release();
   }
 });
 

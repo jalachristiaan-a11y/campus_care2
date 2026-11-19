@@ -3,6 +3,8 @@ import { ArrowLeft, FileText, Send } from 'lucide-react';
 import './MyGrievances.css';
 import SubmitGrievance from './SubmitGrievance.jsx';
 import { apiRequest } from './apiClient.js';
+import { compareOpenComplaintsFirst } from './complaintOrdering.js';
+import { getUrgencyLevel } from './urgencyLevels.js';
 import useScrollReveal from './useScrollReveal.js';
 
 const formatDate = (dateValue) => {
@@ -79,6 +81,12 @@ function TicketTracking({
             <span className="breadcrumb-current">{grievance.id}</span>
           </div>
 
+          {updateConfirmation && (
+            <p className="ticket-tracking-update-success" role="status" aria-live="polite">
+              Your changes were saved successfully.
+            </p>
+          )}
+
           <div className="complaint-panel">
             <div className="complaint-panel-header">
               <div>
@@ -131,8 +139,10 @@ function TicketTracking({
                 {[
                   ['Complaint ID', grievance.id],
                   ['Category', grievance.category || 'Not specified'],
+                  ['Urgency', `${grievance.urgency || 1} · ${getUrgencyLevel(grievance.urgency).label}`],
                   ['Email', grievance.submittedBy || 'Not available'],
                   ['Assigned Department', grievance.department || 'Awaiting assignment'],
+                  ['Assigned Reviewer', grievance.assignedReviewerName || 'Not assigned yet'],
                   ['Campus Location', grievance.location || 'Not provided'],
                   ['Submission Date', formatDateTime(grievance.submittedAt)],
                 ].map(([label, value]) => (
@@ -232,11 +242,6 @@ function TicketTracking({
         </div>
       </div>
 
-      {updateConfirmation && (
-        <p className="ticket-tracking-update-success" role="status">
-          Your complaint information was updated successfully.
-        </p>
-      )}
     </section>
   );
 }
@@ -262,7 +267,21 @@ export default function MyGrievances({
   const [submittingInformation, setSubmittingInformation] = useState(false);
   const [informationError, setInformationError] = useState('');
   const trackedGrievanceId = trackedGrievance?.id;
-  useScrollReveal(`${trackedGrievanceId || editingGrievance?.id || statusFilter}:${grievances.length}`);
+  const activeTrackedGrievance = trackedGrievanceId
+    ? grievances.find((grievance) => grievance.id === trackedGrievanceId) || trackedGrievance
+    : trackedGrievance;
+  const latestEditingGrievance = editingGrievance
+    ? grievances.find((grievance) => grievance.id === editingGrievance.id) || editingGrievance
+    : null;
+  const isEditingAllowed = (grievance) => (
+    grievance.status === 'Submitted' && !grievance.reviewerAssigned
+  );
+  const revealView = trackedGrievance
+    ? `tracking:${trackedGrievance.id}`
+    : editingGrievance
+      ? `editing:${editingGrievance.id}`
+      : `list:${statusFilter}`;
+  useScrollReveal(`${revealView}:${grievances.length}`);
 
   const openTracking = (grievance) => {
     setActivityLoading(true);
@@ -319,7 +338,7 @@ export default function MyGrievances({
   };
 
   const departments = useMemo(
-    () => [...new Set(grievances.map((grievance) => grievance.category))],
+    () => [...new Set(grievances.map((grievance) => grievance.department).filter(Boolean))],
     [grievances],
   );
 
@@ -328,7 +347,7 @@ export default function MyGrievances({
   ).length;
 
   const filteredGrievances = grievances.filter((grievance) => {
-    const searchText = `${grievance.id} ${grievance.title} ${grievance.category} ${grievance.department}`.toLowerCase();
+    const searchText = `${grievance.id} ${grievance.title} ${grievance.category} ${grievance.department} ${grievance.urgency} ${getUrgencyLevel(grievance.urgency).label}`.toLowerCase();
     const matchesSearch = searchText.includes(search.trim().toLowerCase());
     const matchesStatus = statusFilter === 'All'
       || (statusFilter === 'Active' && !['closed', 'withdrawn', 'rejected'].includes(grievance.statusClass))
@@ -336,10 +355,13 @@ export default function MyGrievances({
       || (statusFilter === 'Withdrawn' && grievance.statusClass === 'withdrawn')
       || grievance.status === statusFilter;
     const matchesDepartment = departmentFilter === 'All'
-      || grievance.category === departmentFilter;
+      || grievance.department === departmentFilter;
 
     return matchesSearch && matchesStatus && matchesDepartment;
-  });
+  }).sort((left, right) => (
+    compareOpenComplaintsFirst(left, right)
+    || Date.parse(right.submittedAt) - Date.parse(left.submittedAt)
+  ));
 
   const handleWithdraw = async (grievance) => {
     const confirmed = window.confirm(
@@ -361,6 +383,29 @@ export default function MyGrievances({
     }
   };
 
+  if (
+    editingGrievance
+    && latestEditingGrievance
+    && !isEditingAllowed(latestEditingGrievance)
+  ) {
+    return (
+      <section className="my-grievances">
+        <p className="my-grievance-action-error" role="status">
+          {latestEditingGrievance.assignedReviewerName
+            ? `${latestEditingGrievance.assignedReviewerName} claimed this complaint, so editing is locked.`
+            : 'This complaint is no longer waiting for review, so editing is locked.'}
+        </p>
+        <button
+          type="button"
+          className="my-grievance-track-button"
+          onClick={() => setEditingGrievance(null)}
+        >
+          Return to My Grievances
+        </button>
+      </section>
+    );
+  }
+
   if (editingGrievance) {
     return (
       <SubmitGrievance
@@ -379,7 +424,7 @@ export default function MyGrievances({
   if (trackedGrievance) {
     return (
       <TicketTracking
-        grievance={trackedGrievance}
+        grievance={activeTrackedGrievance}
         activity={complaintActivity}
         activityLoading={activityLoading}
         activityError={activityError}
@@ -426,6 +471,8 @@ export default function MyGrievances({
           <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
             <option>All</option>
             <option>Active</option>
+            <option>Submitted</option>
+            <option>Under Review</option>
             <option>Need More Information</option>
             <option>In Progress</option>
             <option>Resolved</option>
@@ -470,6 +517,11 @@ export default function MyGrievances({
                     {grievance.status}
                   </span>
                   <span className="my-grievance-department">{grievance.department}</span>
+                  {grievance.reviewerAssigned && (
+                    <span className="my-grievance-department">
+                      Reviewing: {grievance.assignedReviewerName || 'Administrator assigned'}
+                    </span>
+                  )}
                   <span className="my-grievance-date">
                     {formatDate(grievance.submittedAt)}
                   </span>
@@ -483,7 +535,7 @@ export default function MyGrievances({
               >
                 Track Ticket
               </button>
-              {grievance.status === 'Under Review' && (
+              {isEditingAllowed(grievance) && (
                 <div className="my-grievance-actions">
                   <button
                     type="button"
@@ -492,15 +544,24 @@ export default function MyGrievances({
                   >
                     Edit
                   </button>
-                  <button
-                    type="button"
-                    className="my-grievance-withdraw-button"
-                    disabled={withdrawingId === grievance.id}
-                    onClick={() => handleWithdraw(grievance)}
-                  >
-                    {withdrawingId === grievance.id ? 'Withdrawing…' : 'Withdraw'}
-                  </button>
+                  {grievance.status === 'Submitted' && (
+                    <button
+                      type="button"
+                      className="my-grievance-withdraw-button"
+                      disabled={withdrawingId === grievance.id}
+                      onClick={() => handleWithdraw(grievance)}
+                    >
+                      {withdrawingId === grievance.id ? 'Withdrawing…' : 'Withdraw'}
+                    </button>
+                  )}
                 </div>
+              )}
+              {(grievance.status === 'Under Review' || grievance.reviewerAssigned) && (
+                <p className="my-grievance-action-error" role="status">
+                  {grievance.assignedReviewerName
+                    ? `${grievance.assignedReviewerName} claimed this complaint, so editing and withdrawal are locked.`
+                    : 'This complaint is under review, so editing and withdrawal are locked.'}
+                </p>
               )}
               {withdrawalError.id === grievance.id && (
                 <p className="my-grievance-action-error" role="alert">

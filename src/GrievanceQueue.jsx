@@ -25,8 +25,11 @@ import {
   X,
 } from 'lucide-react';
 import LogoutConfirmation from './LogoutConfirmation.jsx';
+import CorPreviewModal from './CorPreviewModal.jsx';
 import { apiRequest } from './apiClient.js';
 import campusCareLogo from './assets/campuscare-logo.png';
+import { compareOpenComplaintsFirst } from './complaintOrdering.js';
+import { getUrgencyLevel } from './urgencyLevels.js';
 import useScrollReveal from './useScrollReveal.js';
 
 const departmentList = [
@@ -43,7 +46,13 @@ const mapComplaintToCase = (complaint, slaSettings) => {
   const withdrawn = complaint.status === 'Withdrawn';
   const inactive = resolved || withdrawn || complaint.status === 'Rejected';
   const safetyCase = complaint.category === 'Safety and Security';
-  const slaLimit = Number(safetyCase ? slaSettings.urgentSlaHours : slaSettings.slaHours);
+  const urgency = Number(complaint.urgency) || 1;
+  const standardSla = Number(slaSettings.slaHours) || 48;
+  const urgentSla = Math.min(standardSla, Number(slaSettings.urgentSlaHours) || 12);
+  const interpolatedSla = Math.round(
+    standardSla + ((urgentSla - standardSla) * (urgency - 1)) / 3,
+  );
+  const slaLimit = safetyCase ? Math.min(interpolatedSla, urgentSla) : interpolatedSla;
   const elapsedHours = Math.max(0, (Date.now() - Date.parse(complaint.submittedAt)) / 3600000);
   const overdue = !inactive && elapsedHours >= slaLimit;
 
@@ -60,6 +69,12 @@ const mapComplaintToCase = (complaint, slaSettings) => {
     avatar: (complaint.submittedByName || complaint.submittedBy || 'S').slice(0, 2).toUpperCase(),
     avatarBg: 'bg-rose-100 text-[#800020]',
     category: complaint.category,
+    urgency,
+    urgencyLabel: getUrgencyLevel(urgency).label,
+    assignedReviewerId: complaint.assignedReviewerId || '',
+    assignedReviewerName: complaint.assignedReviewerName || '',
+    reviewerAssigned: Boolean(complaint.reviewerAssigned || complaint.assignedReviewerId),
+    slaDeadlineAt: Date.parse(complaint.submittedAt) + (slaLimit * 3600000),
     sla: resolved ? complaint.status : withdrawn ? 'Withdrawn' : complaint.status === 'Rejected' ? 'Rejected' : overdue ? `Overdue by ${Math.floor(elapsedHours - slaLimit)}h` : `Due in ${Math.ceil(slaLimit - elapsedHours)}h`,
     slaStatus: resolved ? 'resolved' : withdrawn ? 'withdrawn' : complaint.status === 'Rejected' ? 'rejected' : overdue ? 'urgent' : 'normal',
     assignedDesk: complaint.department || 'Awaiting assignment',
@@ -91,6 +106,18 @@ const mapComplaintToCase = (complaint, slaSettings) => {
   };
 };
 
+const isUrgentEscalation = (caseItem) => (
+  caseItem.urgency >= 3
+  || caseItem.slaStatus === 'urgent'
+  || caseItem.status === 'Urgent Review'
+);
+
+const compareQueueCases = (left, right) => (
+  compareOpenComplaintsFirst(left, right)
+  || right.urgency - left.urgency
+  || left.slaDeadlineAt - right.slaDeadlineAt
+);
+
 const resolveNoticeRecipient = (recipientValue) => {
   const recipient = recipientValue.trim();
   const email = recipient.match(/[\w.+-]+@[\w.-]+\.[a-z]{2,}/i)?.[0]?.toLowerCase() || '';
@@ -108,6 +135,7 @@ export default function GrievanceQueue({ user = {}, onLogout }) {
   const [analyticsGranularity, setAnalyticsGranularity] = useState('Daily');
   const [openMenuId, setOpenMenuId] = useState(null);
   const [selectedCase, setSelectedCase] = useState(null);
+  const [selectedCor, setSelectedCor] = useState(null);
   const [selectedDepartment, setSelectedDepartment] = useState(null);
   const [complaintActivity, setComplaintActivity] = useState({ complaintId: '', activity: [], error: '' });
   const [responseMessage, setResponseMessage] = useState('');
@@ -115,6 +143,7 @@ export default function GrievanceQueue({ user = {}, onLogout }) {
   const [activitySaving, setActivitySaving] = useState(false);
   const [activityError, setActivityError] = useState('');
   const resolutionNoteFieldRef = useRef(null);
+  const responseSubmissionRef = useRef(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [notificationMsg, setNotificationMsg] = useState(null);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -130,6 +159,13 @@ export default function GrievanceQueue({ user = {}, onLogout }) {
   const [settingsError, setSettingsError] = useState('');
   const [settingsSaveError, setSettingsSaveError] = useState('');
   const [settingsLoadAttempt, setSettingsLoadAttempt] = useState(0);
+  const [pendingStudents, setPendingStudents] = useState([]);
+  const [verificationLoading, setVerificationLoading] = useState(false);
+  const [verificationError, setVerificationError] = useState('');
+  const [reviewers, setReviewers] = useState([]);
+  const [reviewersLoading, setReviewersLoading] = useState(true);
+  const [reviewerSaving, setReviewerSaving] = useState(false);
+  const [reviewerError, setReviewerError] = useState('');
 
   // Direct Notices State
   const [notices, setNotices] = useState([]);
@@ -196,13 +232,42 @@ export default function GrievanceQueue({ user = {}, onLogout }) {
 
   useEffect(() => {
     let active = true;
+    const loadPendingStudents = async () => {
+      if (activeNav !== 'Verification Reviews') return;
+      setVerificationLoading(true);
+      setVerificationError('');
+      try {
+        const result = await apiRequest('/api/auth/students/pending');
+        if (active) setPendingStudents(result.students);
+      } catch (error) {
+        if (active) {
+          setVerificationError(error instanceof Error ? error.message : 'Unable to load verification reviews.');
+        }
+      } finally {
+        if (active) setVerificationLoading(false);
+      }
+    };
+    loadPendingStudents();
+    return () => {
+      active = false;
+    };
+  }, [activeNav]);
+
+  useEffect(() => {
+    let active = true;
     const loadCases = async () => {
       try {
         const result = await apiRequest('/api/complaints');
         if (active) {
-          setCases(result.complaints.map((complaint) => (
+          const mappedCases = result.complaints.map((complaint) => (
             mapComplaintToCase(complaint, { slaHours, urgentSlaHours })
-          )));
+          ));
+          setCases(mappedCases);
+          setSelectedCase((current) => (
+            current
+              ? mappedCases.find((caseItem) => caseItem.id === current.id) || current
+              : null
+          ));
           setAnalyticsNow(Date.now());
           setCasesError('');
         }
@@ -222,6 +287,24 @@ export default function GrievanceQueue({ user = {}, onLogout }) {
       window.clearInterval(intervalId);
     };
   }, [slaHours, urgentSlaHours]);
+
+  useEffect(() => {
+    let active = true;
+    const loadReviewers = async () => {
+      try {
+        const result = await apiRequest('/api/complaints/reviewers');
+        if (active) setReviewers(result.reviewers);
+      } catch (error) {
+        if (active) setReviewerError(error instanceof Error ? error.message : 'Unable to load administrators.');
+      } finally {
+        if (active) setReviewersLoading(false);
+      }
+    };
+    loadReviewers();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -355,6 +438,7 @@ export default function GrievanceQueue({ user = {}, onLogout }) {
 
   const openCaseDetails = (caseItem) => {
     setSelectedCase(caseItem);
+    setReviewerError('');
     setResponseMessage('');
     setResolutionNote('');
     setActivityError('');
@@ -366,6 +450,7 @@ export default function GrievanceQueue({ user = {}, onLogout }) {
     { label: 'Departments', icon: Building2 },
     { label: 'Web Analytics', icon: BarChart3 },
     { label: 'Student Filers', icon: Users },
+    { label: 'Verification Reviews', icon: CheckCircle2 },
     { label: 'Direct Notices', icon: MessageSquare },
     { label: 'Settings', icon: Settings }
   ];
@@ -377,10 +462,19 @@ export default function GrievanceQueue({ user = {}, onLogout }) {
       return;
     }
 
+    let complaintToUpdate = caseItem;
+    if (status === 'In Progress' && !caseItem.assignedReviewerId) {
+      complaintToUpdate = await handleAssignReviewer(caseItem, user.studentId);
+      if (!complaintToUpdate) {
+        setOpenMenuId(null);
+        return;
+      }
+    }
+
     let updatedComplaint;
     try {
       const result = await apiRequest(
-        `/api/complaints/${encodeURIComponent(caseItem.grievanceId)}/status`,
+        `/api/complaints/${encodeURIComponent(complaintToUpdate.grievanceId)}/status`,
         { method: 'PATCH', body: JSON.stringify({ status, statusNote: note }) },
       );
       updatedComplaint = mapComplaintToCase(result.complaint, { slaHours, urgentSlaHours });
@@ -400,6 +494,9 @@ export default function GrievanceQueue({ user = {}, onLogout }) {
     }
     setOpenMenuId(null);
     setResolutionNote('');
+    if (['Resolved', 'Rejected', 'Closed', 'Withdrawn'].includes(status)) {
+      setResponseMessage('');
+    }
     showNotification(`Case ${caseId} marked ${status}.`);
     try {
       const activityResult = await apiRequest(
@@ -419,6 +516,60 @@ export default function GrievanceQueue({ user = {}, onLogout }) {
     }
   };
 
+  const handleAssignReviewer = async (caseItem, reviewerId) => {
+    if (!caseItem || !reviewerId) {
+      const message = 'Choose an administrator before assigning this complaint.';
+      setReviewerError(message);
+      showNotification(message, 'error');
+      return null;
+    }
+
+    setReviewerSaving(true);
+    setReviewerError('');
+    try {
+      const result = await apiRequest(
+        `/api/complaints/${encodeURIComponent(caseItem.grievanceId)}/reviewer`,
+        { method: 'PATCH', body: JSON.stringify({ reviewerId }) },
+      );
+      const updatedComplaint = mapComplaintToCase(result.complaint, { slaHours, urgentSlaHours });
+      setCases((previous) => previous.map((item) => (
+        item.id === caseItem.id ? updatedComplaint : item
+      )));
+      setSelectedCase((current) => (
+        current?.id === caseItem.id ? updatedComplaint : current
+      ));
+      showNotification(
+        updatedComplaint.assignedReviewerId === user.studentId
+          ? 'You are now reviewing this complaint.'
+          : `Review assigned to ${updatedComplaint.assignedReviewerName}.`,
+      );
+      try {
+        const activityResult = await apiRequest(
+          `/api/complaints/${encodeURIComponent(caseItem.grievanceId)}/activity`,
+        );
+        setComplaintActivity({
+          complaintId: caseItem.grievanceId,
+          activity: activityResult.activity,
+          error: '',
+        });
+      } catch (error) {
+        setComplaintActivity({
+          complaintId: caseItem.grievanceId,
+          activity: [],
+          error: error instanceof Error ? error.message : 'Unable to load complaint activity.',
+        });
+      }
+      return updatedComplaint;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to assign this reviewer.';
+      setReviewerError(message);
+      showNotification(message, 'error');
+      return null;
+    } finally {
+      setReviewerSaving(false);
+    }
+  };
+
   const handleResolveCase = (caseId) => {
     const caseItem = cases.find((item) => item.id === caseId);
     if (caseItem) openCaseDetails(caseItem);
@@ -431,8 +582,9 @@ export default function GrievanceQueue({ user = {}, onLogout }) {
   };
 
   const handleSendComplaintResponse = async () => {
-    if (!selectedCase || !responseMessage.trim()) return;
+    if (!selectedCase || !responseMessage.trim() || responseSubmissionRef.current) return;
 
+    responseSubmissionRef.current = true;
     setActivitySaving(true);
     setActivityError('');
     try {
@@ -455,6 +607,7 @@ export default function GrievanceQueue({ user = {}, onLogout }) {
     } catch (error) {
       setActivityError(error instanceof Error ? error.message : 'Unable to save complaint response.');
     } finally {
+      responseSubmissionRef.current = false;
       setActivitySaving(false);
     }
   };
@@ -467,6 +620,26 @@ export default function GrievanceQueue({ user = {}, onLogout }) {
     }
 
     setSelectedDepartment(departmentName);
+  };
+
+  const reviewStudentCor = async (studentId, status) => {
+    try {
+      await apiRequest(`/api/auth/students/${encodeURIComponent(studentId)}/cor`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status }),
+      });
+      setPendingStudents((previous) =>
+        previous.map((student) =>
+          student.id === studentId ? { ...student, cor_status: status } : student,
+        ),
+      );
+      showNotification(`COR ${status}.`);
+    } catch (error) {
+      showNotification(
+        error instanceof Error ? error.message : 'Unable to review the COR.',
+        'error',
+      );
+    }
   };
 
   const handleSaveSettings = async () => {
@@ -513,7 +686,7 @@ export default function GrievanceQueue({ user = {}, onLogout }) {
     const caseItem = cases.find((item) => item.id === caseId);
     if (!caseItem) return;
 
-    const departments = departmentList.map((department) => department.name);
+    const departments = departmentList;
     const currentIndex = departments.indexOf(caseItem.assignedDesk);
     const nextDepartment = departments[(currentIndex + 1) % departments.length];
     try {
@@ -584,27 +757,31 @@ export default function GrievanceQueue({ user = {}, onLogout }) {
         item.filer.toLowerCase().includes(searchQuery.toLowerCase()) ||
         item.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
         item.type.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.assignedDesk.toLowerCase().includes(searchQuery.toLowerCase());
+        item.assignedDesk.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        String(item.urgency).includes(searchQuery) ||
+        item.urgencyLabel.toLowerCase().includes(searchQuery.toLowerCase());
 
       if (!matchesSearch) return false;
 
+      if (activeTab === 'Submitted') return item.status === 'Submitted';
       if (activeTab === 'Under Review') return item.status === 'Under Review';
       if (activeTab === 'Need More Information') return item.status === 'Need More Information';
       if (activeTab === 'In Progress') return item.status === 'In Progress';
-      if (activeTab === 'Urgent Escalations') return item.slaStatus === 'urgent' || item.status === 'Urgent Review';
+      if (activeTab === 'Urgent Escalations') return isUrgentEscalation(item);
       if (activeTab === 'Resolved') return item.status === 'Resolved';
       if (activeTab === 'Rejected') return item.status === 'Rejected';
       if (activeTab === 'Closed') return item.status === 'Closed';
       return true;
-    });
+    }).sort(compareQueueCases);
   }, [cases, searchQuery, activeTab]);
 
   const tabs = [
     { label: 'All Cases', count: cases.length },
+    { label: 'Submitted', count: cases.filter((c) => c.status === 'Submitted').length },
     { label: 'Under Review', count: cases.filter((c) => c.status === 'Under Review').length },
     { label: 'Need More Information', count: cases.filter((c) => c.status === 'Need More Information').length },
     { label: 'In Progress', count: cases.filter((c) => c.status === 'In Progress').length },
-    { label: 'Urgent Escalations', count: cases.filter((c) => c.slaStatus === 'urgent' || c.status === 'Urgent Review').length },
+    { label: 'Urgent Escalations', count: cases.filter(isUrgentEscalation).length },
     { label: 'Resolved', count: cases.filter((c) => c.status === 'Resolved').length },
     { label: 'Rejected', count: cases.filter((c) => c.status === 'Rejected').length },
     { label: 'Closed', count: cases.filter((c) => c.status === 'Closed').length }
@@ -683,6 +860,8 @@ export default function GrievanceQueue({ user = {}, onLogout }) {
     ? cases.findIndex((caseItem) => caseItem.id === selectedCase.id)
     : -1;
   const selectedCaseSubmittedAt = selectedCase ? new Date(selectedCase.submittedAt) : null;
+  const selectedCaseAllowsResponse = selectedCase
+    && !['Resolved', 'Rejected', 'Withdrawn', 'Closed'].includes(selectedCase.status);
   const selectedCaseProgressIndex = selectedCase?.status === 'Under Review'
     ? 1
     : selectedCase?.status === 'In Progress'
@@ -737,7 +916,7 @@ export default function GrievanceQueue({ user = {}, onLogout }) {
                       setActiveNav(item.label);
                       setAdminMenuOpen(false);
                     }}
-                    className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                    className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-[color,background-color,border-color,box-shadow] cursor-pointer ${
                       isActive
                         ? 'bg-white/20 text-white shadow-xs'
                         : 'text-white/75 hover:bg-white/10 hover:text-white'
@@ -892,7 +1071,7 @@ export default function GrievanceQueue({ user = {}, onLogout }) {
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Search ticket #, filer, desk..."
-                    className="w-full bg-white hover:bg-slate-50 focus:bg-white border border-slate-200/80 rounded-full pl-9 pr-3.5 py-2 text-[11px] focus:outline-none focus:ring-2 focus:ring-[#800020]/20 transition-all placeholder:text-slate-400"
+                    className="w-full bg-white hover:bg-slate-50 focus:bg-white border border-slate-200/80 rounded-full pl-9 pr-3.5 py-2 text-[11px] focus:outline-none focus:ring-2 focus:ring-[#800020]/20 transition-[border-color,box-shadow,background-color] placeholder:text-slate-400"
                   />
                 </div>
               </div>
@@ -972,7 +1151,7 @@ export default function GrievanceQueue({ user = {}, onLogout }) {
                         key={tab.label}
                         type="button"
                         onClick={() => setActiveTab(tab.label)}
-                        className={`pb-3 text-xs sm:text-sm font-medium transition-all relative whitespace-nowrap cursor-pointer ${
+                        className={`pb-3 text-xs sm:text-sm font-medium transition-[color,border-color] relative whitespace-nowrap cursor-pointer ${
                           isActive ? 'text-[#800020] font-bold' : 'text-slate-500 hover:text-slate-800'
                         }`}
                       >
@@ -1038,14 +1217,16 @@ export default function GrievanceQueue({ user = {}, onLogout }) {
                   </div>
 
                   <div className="overflow-x-auto">
-                    <table className="w-full min-w-[760px] border-separate border-spacing-y-2 p-3 text-left text-xs">
+                    <table className="w-full min-w-[1020px] border-separate border-spacing-y-2 p-3 text-left text-xs">
                       <thead>
                         <tr className="text-slate-400 font-semibold uppercase tracking-[0.14em] text-[10px]">
                           <th className="px-3 py-2">Id</th>
                           <th className="px-3 py-2">Filer Info</th>
                           <th className="px-3 py-2">Category</th>
+                          <th className="px-3 py-2">Urgency</th>
                           <th className="px-3 py-2">SLA Time Remaining</th>
                           <th className="px-3 py-2">Assigned Desk</th>
+                          <th className="px-3 py-2">Reviewer</th>
                           <th className="px-3 py-2">Status</th>
                           <th className="px-3 py-2">Type</th>
                           <th className="px-3 py-2 text-right">Action</th>
@@ -1054,7 +1235,7 @@ export default function GrievanceQueue({ user = {}, onLogout }) {
                       <tbody>
                         {filteredCases.length === 0 ? (
                           <tr>
-                            <td colSpan="8" className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-12 text-center text-slate-400">
+                            <td colSpan="10" className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-12 text-center text-slate-400">
                               {casesLoading
                                 ? 'Loading complaints…'
                                 : casesError || 'No complaints found. Submitted complaints will appear here.'}
@@ -1079,7 +1260,7 @@ export default function GrievanceQueue({ user = {}, onLogout }) {
                                   openCaseDetails(item);
                                 }
                               }}
-                              className={`group cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#800020] focus-visible:ring-offset-2 transition-all rounded-2xl border ${
+                              className={`group cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#800020] focus-visible:ring-offset-2 transition-[transform,box-shadow,border-color] rounded-2xl border ${
                                 item.slaStatus === 'urgent'
                                   ? 'border-rose-200 bg-gradient-to-r from-rose-50/90 to-white shadow-sm'
                                   : 'border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm'
@@ -1098,6 +1279,17 @@ export default function GrievanceQueue({ user = {}, onLogout }) {
                                 </div>
                               </td>
                               <td className="px-3 py-3 text-slate-600 font-semibold">{item.category}</td>
+                              <td className="px-3 py-3">
+                                <span className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-[10px] font-bold ${
+                                  item.urgency >= 4
+                                    ? 'bg-rose-100 text-rose-800'
+                                    : item.urgency === 3
+                                      ? 'bg-amber-100 text-amber-800'
+                                      : 'bg-slate-100 text-slate-700'
+                                }`}>
+                                  {item.urgency} · {item.urgencyLabel}
+                                </span>
+                              </td>
                               <td className="px-3 py-3">
                                 <div className="flex items-center gap-1.5 font-medium">
                                   {item.slaStatus === 'resolved' ? (
@@ -1120,6 +1312,9 @@ export default function GrievanceQueue({ user = {}, onLogout }) {
                                 <span className={`font-semibold ${item.slaStatus === 'urgent' ? 'text-slate-700' : 'text-[#800020]'}`}>
                                   {item.assignedDesk}
                                 </span>
+                              </td>
+                              <td className="px-3 py-3 text-slate-600">
+                                {item.assignedReviewerName || 'Unassigned'}
                               </td>
                               <td className="px-3 py-3">
                                 <div className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 font-semibold text-[11px]">
@@ -1273,7 +1468,7 @@ export default function GrievanceQueue({ user = {}, onLogout }) {
                       onClick={() => handleOpenDepartmentCases(dept.name)}
                       data-scroll-reveal
                       data-interactive-card
-                      className="w-full bg-white rounded-xl border border-slate-200 p-5 space-y-3 text-left shadow-2xs hover:border-[#800020]/40 hover:shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-[#800020] transition-all"
+                      className="w-full bg-white rounded-xl border border-slate-200 p-5 space-y-3 text-left shadow-2xs hover:border-[#800020]/40 hover:shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-[#800020] transition-[transform,box-shadow,border-color]"
                       aria-label={`View ${dept.active + dept.resolved} complaint${dept.active + dept.resolved === 1 ? '' : 's'} assigned to ${dept.name}`}
                     >
                       <div className="flex items-start justify-between">
@@ -1567,6 +1762,69 @@ export default function GrievanceQueue({ user = {}, onLogout }) {
               </div>
             )}
 
+            {activeNav === 'Verification Reviews' && (
+              <div className="space-y-6">
+                <div>
+                  <h2 className="text-xl sm:text-2xl font-bold text-slate-900">Student Verification Reviews</h2>
+                  <p className="text-xs text-slate-500 mt-0.5">Approve or reject submitted Certificates of Registration.</p>
+                </div>
+                {verificationError && (
+                  <p role="alert" className="rounded-lg bg-rose-50 p-3 text-xs text-rose-800">{verificationError}</p>
+                )}
+                {verificationLoading ? (
+                  <p role="status" className="text-xs text-slate-500">Loading verification records…</p>
+                ) : (
+                  <div className="grid gap-3">
+                    {pendingStudents.map((student) => (
+                      <article key={student.id} className="rounded-xl border border-slate-200 bg-white p-4">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-bold text-slate-900">{student.full_name}</p>
+                            <p className="text-xs text-slate-500">{student.id} · {student.email}</p>
+                            <p className="mt-1 text-[11px] text-slate-500">
+                              Email: {student.email_verified_at ? 'Verified' : 'Not verified'} · COR: {student.cor_status}
+                            </p>
+                          </div>
+                          {student.cor_document?.data && (
+                            <button
+                              type="button"
+                              onClick={() => setSelectedCor(student.cor_document)}
+                              className="text-xs font-bold text-[#800020] underline"
+                            >
+                              View COR
+                            </button>
+                          )}
+                        </div>
+                        {student.cor_status === 'pending' && (
+                          <div className="mt-4 flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => reviewStudentCor(student.id, 'approved')}
+                              className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white"
+                            >
+                              Approve
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => reviewStudentCor(student.id, 'rejected')}
+                              className="rounded-lg border border-rose-200 px-3 py-2 text-xs font-bold text-rose-700"
+                            >
+                              Reject
+                            </button>
+                          </div>
+                        )}
+                      </article>
+                    ))}
+                    {pendingStudents.length === 0 && (
+                      <p className="rounded-xl border border-slate-200 bg-white p-5 text-xs text-slate-500">
+                        No student verification records need review.
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* 6. DIRECT NOTICES */}
             {activeNav === 'Direct Notices' && (
               <div className="space-y-6">
@@ -1699,7 +1957,7 @@ export default function GrievanceQueue({ user = {}, onLogout }) {
                       type="button"
                       disabled={settingsLoading || Boolean(settingsError)}
                       onClick={() => setIntakeOpen(!intakeOpen)}
-                      className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-[color,background-color,border-color] cursor-pointer ${
                         intakeOpen ? 'bg-emerald-500 text-white' : 'bg-slate-200 text-slate-600'
                       }`}
                     >
@@ -1723,7 +1981,7 @@ export default function GrievanceQueue({ user = {}, onLogout }) {
                           disabled={settingsLoading || Boolean(settingsError)}
                           className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-semibold"
                         />
-                        <span className="text-[10px] text-slate-400">Hours for non-safety complaints (1–720)</span>
+                        <span className="text-[10px] text-slate-400">Level 1 starts here; urgency levels shorten the SLA toward the safety setting (1–720 hours).</span>
                       </div>
                       <div>
                         <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Safety Case SLA</label>
@@ -1737,7 +1995,7 @@ export default function GrievanceQueue({ user = {}, onLogout }) {
                           disabled={settingsLoading || Boolean(settingsError)}
                           className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-semibold"
                         />
-                        <span className="text-[10px] text-slate-400">Hours for Safety and Security complaints (1–720)</span>
+                        <span className="text-[10px] text-slate-400">Level 4 ends here; Safety and Security complaints always use this SLA or shorter (1–720 hours).</span>
                       </div>
                     </div>
                   </div>
@@ -1991,6 +2249,66 @@ export default function GrievanceQueue({ user = {}, onLogout }) {
                   </div>
                 </div>
 
+                <section
+                  className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4"
+                  aria-labelledby="complaint-reviewer-title"
+                >
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                    <div>
+                      <h3 id="complaint-reviewer-title" className="text-sm font-bold text-slate-900">
+                        Assigned reviewer
+                      </h3>
+                      <p className="mt-1 text-xs text-slate-600">
+                        {selectedCase.assignedReviewerName || 'No reviewer assignment recorded.'}
+                      </p>
+                      <p className="mt-1 max-w-xl text-[11px] text-slate-500">
+                        {selectedCase.assignedReviewerId
+                          ? 'Choose another administrator to transfer the review; the student will be notified.'
+                          : 'Claim or assign this complaint to start review. The student will be notified and editing will be locked.'}
+                      </p>
+                    </div>
+                    {!['Resolved', 'Rejected', 'Withdrawn', 'Closed'].includes(selectedCase.status) ? (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <label className="sr-only" htmlFor="complaint-reviewer-select">
+                          Choose a reviewing administrator
+                        </label>
+                        <select
+                          id="complaint-reviewer-select"
+                          value={selectedCase.assignedReviewerId}
+                          onChange={(event) => handleAssignReviewer(selectedCase, event.target.value)}
+                          disabled={reviewersLoading || reviewerSaving}
+                          className="min-w-[180px] rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#800020]"
+                        >
+                          <option value="">
+                            {reviewersLoading ? 'Loading administrators…' : 'Choose administrator'}
+                          </option>
+                          {reviewers.map((reviewer) => (
+                            <option key={reviewer.id} value={reviewer.id}>{reviewer.fullName}</option>
+                          ))}
+                        </select>
+                        {!selectedCase.assignedReviewerId && (
+                          <button
+                            type="button"
+                            onClick={() => handleAssignReviewer(selectedCase, user.studentId)}
+                            disabled={reviewersLoading || reviewerSaving || !user.studentId}
+                            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            Claim for me
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-xs font-medium text-slate-500">Review assignment is closed.</p>
+                    )}
+                  </div>
+                  {reviewerError && (
+                    <p className="mt-2 text-xs text-rose-700" role="alert">{reviewerError}</p>
+                  )}
+                  {!reviewersLoading && reviewers.length === 0 && !reviewerError && (
+                    <p className="mt-2 text-xs text-slate-500">No administrator accounts are available to assign.</p>
+                  )}
+                </section>
+
                 <div className="mt-5 grid gap-6 lg:grid-cols-[minmax(260px,0.78fr)_minmax(0,1.45fr)] lg:gap-8">
                   <aside className="min-w-0 lg:border-r lg:border-slate-200 lg:pr-7">
                     <h3 className="mb-2 text-sm font-bold text-slate-900">Filer &amp; case details</h3>
@@ -2000,6 +2318,7 @@ export default function GrievanceQueue({ user = {}, onLogout }) {
                         ['Student ID', selectedCase.studentId || 'Not provided'],
                         ['Email', selectedCase.recipientEmail || 'Not provided'],
                         ['Category', selectedCase.category || 'Not specified'],
+                        ['Urgency', `${selectedCase.urgency} · ${selectedCase.urgencyLabel}`],
                         ['Assigned desk', selectedCase.assignedDesk || 'Awaiting assignment'],
                         ['Location', selectedCase.location || 'Not provided'],
                       ].map(([label, value]) => (
@@ -2084,32 +2403,42 @@ export default function GrievanceQueue({ user = {}, onLogout }) {
                     )}
                   </ol>
 
+                  {!selectedCaseAllowsResponse && selectedCase.status !== 'Withdrawn' && (
+                    <p className="mt-4 text-xs text-slate-500">
+                      New responses are closed because this complaint is {selectedCase.status.toLowerCase()}.
+                    </p>
+                  )}
+
                   {selectedCase.status !== 'Withdrawn' && (
                     <div className="mt-5 space-y-3">
-                      <label className="block text-xs font-semibold text-slate-700" htmlFor="complaint-response">
-                        Add a response for the student
-                        <textarea
-                          id="complaint-response"
-                          value={responseMessage}
-                          onChange={(event) => setResponseMessage(event.target.value)}
-                          maxLength={3000}
-                          rows={3}
-                          placeholder="Write an update or response about this complaint…"
-                          className="mt-1 w-full resize-y rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-800 focus:border-[#800020] focus:outline-none focus:ring-2 focus:ring-[#800020]/15"
-                        />
-                        <span className="mt-1 block text-right text-[10px] font-normal text-slate-500">{responseMessage.length}/3000</span>
-                      </label>
+                      {selectedCaseAllowsResponse && (
+                        <label className="block text-xs font-semibold text-slate-700" htmlFor="complaint-response">
+                          Add a response for the student
+                          <textarea
+                            id="complaint-response"
+                            value={responseMessage}
+                            onChange={(event) => setResponseMessage(event.target.value)}
+                            maxLength={3000}
+                            rows={3}
+                            placeholder="Write an update or response about this complaint…"
+                            className="mt-1 w-full resize-y rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-800 focus:border-[#800020] focus:outline-none focus:ring-2 focus:ring-[#800020]/15"
+                          />
+                          <span className="mt-1 block text-right text-[10px] font-normal text-slate-500">{responseMessage.length}/3000</span>
+                        </label>
+                      )}
 
                       <div className="flex flex-wrap items-center gap-2">
-                        <button
-                          type="button"
-                          disabled={activitySaving || !responseMessage.trim() || ['Rejected', 'Withdrawn', 'Closed'].includes(selectedCase.status)}
-                          onClick={handleSendComplaintResponse}
-                          className="rounded-lg bg-[#800020] px-3 py-2 text-xs font-semibold text-white hover:bg-[#66001a] disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          {activitySaving ? 'Saving…' : 'Add response'}
-                        </button>
-                        {!['Resolved', 'Rejected', 'Withdrawn', 'Closed'].includes(selectedCase.status) && (
+                        {selectedCaseAllowsResponse && (
+                          <button
+                            type="button"
+                            disabled={activitySaving || !responseMessage.trim()}
+                            onClick={handleSendComplaintResponse}
+                            className="rounded-lg bg-[#800020] px-3 py-2 text-xs font-semibold text-white hover:bg-[#66001a] disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {activitySaving ? 'Saving…' : 'Add response'}
+                          </button>
+                        )}
+                        {selectedCaseAllowsResponse && (
                           <button
                             type="button"
                             disabled={activitySaving || !resolutionNote.trim()}
@@ -2202,6 +2531,9 @@ export default function GrievanceQueue({ user = {}, onLogout }) {
           onCancel={() => setLogoutConfirmationOpen(false)}
           onConfirm={onLogout}
         />
+      )}
+      {selectedCor && (
+        <CorPreviewModal document={selectedCor} onClose={() => setSelectedCor(null)} />
       )}
     </div>
   );
